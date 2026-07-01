@@ -13,7 +13,8 @@ def test_stub_demo_exports_expected_artifacts(tmp_path):
     package = run_demo(
         palette_path=ROOT / "examples" / "palette_db.example.json",
         brief_path=ROOT / "examples" / "project_brief.example.json",
-        mode="stub",
+        ideation_mode="stub",
+        image_mode="stub",
         allow_assumptions=True,
         out_dir=tmp_path,
     )
@@ -49,6 +50,8 @@ def test_stub_demo_exports_expected_artifacts(tmp_path):
 
     manifest = json.loads((tmp_path / "visual_manifest.json").read_text())
     assert manifest["provider"] == "stub"
+    assert manifest["ideation_mode"] == "stub"
+    assert manifest["image_mode"] == "stub"
     assert [image["image_path"] for image in manifest["images"]] == [
         "images/concept_01_variant_01.png",
         "images/concept_01_variant_02.png",
@@ -149,4 +152,39 @@ def test_gemini_image_mode_without_key_fails_cleanly(tmp_path, monkeypatch):
 
     assert result.returncode != 0
     assert "GEMINI_API_KEY" in result.stderr
+    assert "Traceback" not in result.stderr
+
+
+def test_openai_responses_image_mode_without_key_fails_cleanly(tmp_path, monkeypatch):
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "mosaic_agent.demo",
+            "--palette",
+            str(ROOT / "examples" / "palette_db.example.json"),
+            "--brief",
+            str(ROOT / "examples" / "project_brief.example.json"),
+            "--ideation-mode",
+            "stub",
+            "--image-mode",
+            "openai-responses-image",
+            "--allow-assumptions",
+            "--concept-limit",
+            "1",
+            "--variants-per-concept",
+            "1",
+            "--out",
+            str(tmp_path),
+        ],
+        cwd=ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode != 0
+    assert "OPENAI_API_KEY" in result.stderr
     assert "Traceback" not in result.stderr

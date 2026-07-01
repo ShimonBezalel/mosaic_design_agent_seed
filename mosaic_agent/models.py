@@ -2,7 +2,19 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+from mosaic_agent.reference_images import ensure_reference_images_exist
+
+
+ReferenceImageRole = Literal[
+    "artist_style_reference",
+    "canvas_photo",
+    "site_context",
+    "palette_photo",
+    "composition_sketch",
+    "generated_brief_moodboard",
+]
 
 
 class StrictModel(BaseModel):
@@ -30,10 +42,19 @@ class ProjectBrief(StrictModel):
     granularity: Literal["coarse", "medium", "fine", "mixed", "unknown"] = "unknown"
     canvas: Canvas
     reference_image_paths: list[str] = Field(default_factory=list)
+    reference_image_roles: list[ReferenceImageRole] = Field(default_factory=list)
     desired_outputs: list[
         Literal["questions", "concepts", "image_prompts", "image_renders", "critique", "execution_notes"]
     ]
     notes: str = ""
+
+    @model_validator(mode="after")
+    def default_and_validate_reference_roles(self) -> "ProjectBrief":
+        if self.reference_image_paths and not self.reference_image_roles:
+            self.reference_image_roles = ["artist_style_reference" for _ in self.reference_image_paths]
+        if len(self.reference_image_roles) != len(self.reference_image_paths):
+            raise ValueError("reference_image_roles must match reference_image_paths length")
+        return self
 
 
 class Tile(StrictModel):
@@ -77,6 +98,17 @@ class ImageGenerationRequest(StrictModel):
     variant_id: str = "variant_01"
     prompt: str
     negative_prompt: str = ""
+    input_image_paths: list[str] = Field(default_factory=list)
+    input_image_roles: list[ReferenceImageRole] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_input_images(self) -> "ImageGenerationRequest":
+        if self.input_image_paths and not self.input_image_roles:
+            self.input_image_roles = ["artist_style_reference" for _ in self.input_image_paths]
+        if len(self.input_image_roles) != len(self.input_image_paths):
+            raise ValueError("input_image_roles must match input_image_paths length")
+        ensure_reference_images_exist(self.input_image_paths)
+        return self
 
 
 class ImageGenerationResult(StrictModel):
@@ -120,7 +152,16 @@ class Concept(StrictModel):
 class ConceptPackage(StrictModel):
     run_id: str
     project_name: str
-    mode: Literal["stub", "real_model_stub_images", "real_images", "openai-image", "gemini-image"] = "stub"
+    mode: Literal[
+        "stub",
+        "real_model_stub_images",
+        "real_images",
+        "openai-image",
+        "openai-responses-image",
+        "gemini-image",
+    ] = "stub"
+    ideation_mode: Literal["stub", "openai"] = "stub"
+    image_mode: Literal["stub", "openai-image", "openai-responses-image", "gemini-image"] = "stub"
     assumptions: list[str]
     questions: list[str]
     palette_summary: str = ""
@@ -150,12 +191,21 @@ class VisualManifestImage(StrictModel):
     critique: VisualCritique
 
 
+class VisualManifestInputReference(StrictModel):
+    role: ReferenceImageRole
+    source_path: str
+    image_path: str
+
+
 class VisualManifest(StrictModel):
     run_id: str
     provider: str
+    ideation_mode: Literal["stub", "openai"] = "stub"
+    image_mode: Literal["stub", "openai-image", "openai-responses-image", "gemini-image"] = "stub"
     project_name: str
     location: str
     reference_image_paths: list[str] = Field(default_factory=list)
+    input_references: list[VisualManifestInputReference] = Field(default_factory=list)
     images: list[VisualManifestImage]
 
 

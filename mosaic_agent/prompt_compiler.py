@@ -23,23 +23,24 @@ def compile_visual_prompt(
     validate_tile_ids(concept.palette_tile_ids, palette)
     selected_tiles = _selected_tiles(concept, palette)
     palette_text = "; ".join(f"{tile.name} ({tile.hex}) [{tile.tile_id}]" for tile in selected_tiles)
-    required_text = ", ".join(brief.required_text) if brief.required_text else "no confirmed lettering"
+    required_text = _lettering_instruction(brief)
     reference_text = ", ".join(brief.reference_image_paths) if brief.reference_image_paths else "none"
     variant_direction = _variant_direction(variant_index)
     has_hebrew = _has_hebrew_text(brief)
 
     prompt = (
-        f"Create variant {variant_index} of a proposal image, not a final exact construction plan, for a "
-        f"broken ceramic tile mosaic concept named '{concept.name}'. The work is for a public entrance stone "
-        f"at {brief.location}, using a natural canvas context and preserving large-scale readability from "
+        f"Create variant {variant_index} as a proposal image, not a final exact construction plan, for a public "
+        f"entrance stone concept render and broken ceramic tile mosaic concept named '{concept.name}'. The work is for a public entrance "
+        f"stone at {brief.location}, using a natural stone canvas and preserving large-scale readability from "
         f"approximately {brief.viewing_distance_m or 'unknown'} meters. "
         f"Design intent: {concept.intent} Composition: {concept.composition} Mosaic grammar: {concept.mosaic_grammar} "
         f"Use only these real palette colors from the palette DB by name and hex: {palette_text}. "
-        f"Requested text/lettering to include as hand-drawn mosaic geometry: {required_text}. "
+        f"Lettering treatment: {required_text}. "
         f"Reference image paths available for context: {reference_text}. "
         f"{variant_direction} Make visible grout and negative-space part of the design. "
         f"Make the design feel hand-built, irregular, "
-        f"and executable with broken ceramic tile, with broad readable shapes and controlled accents."
+        f"and executable with irregular hand-built shards of broken ceramic tile, with broad readable forms from "
+        f"road distance and controlled accents. Use palette-constrained color language only."
     )
     if has_hebrew:
         prompt += (
@@ -68,3 +69,15 @@ def _variant_direction(variant_index: int) -> str:
 
 def _has_hebrew_text(brief: ProjectBrief) -> bool:
     return any("\u0590" <= char <= "\u05FF" for text in brief.required_text for char in text)
+
+
+def _lettering_instruction(brief: ProjectBrief) -> str:
+    if _has_hebrew_text(brief):
+        return (
+            "Hebrew text is requested, but do not render final Hebrew lettering. Use a reserved high-contrast "
+            "lettering field, ribbon, or arc and optionally show abstract placeholder letter blocks. "
+            "Final Hebrew lettering must be manually redrawn/vectorized by the artist"
+        )
+    if brief.required_text:
+        return "Reserve a readable lettering field for the requested text; do not treat generated lettering as final"
+    return "No confirmed lettering; keep any text areas flexible"

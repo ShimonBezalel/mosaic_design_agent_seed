@@ -1,0 +1,23 @@
+{
+  "project_name": "Town Entrance Stone Reference Fixture",
+  "location": "Har Amasa entrance",
+  "intent": "Create a welcoming public mosaic for the town entrance stone using the attached reference image as an artist-style reference. The result should feel handmade, warm, local, and suitable for a public road-facing entrance.",
+  "required_text": ["ברוכים הבאים", "הר עמשא"],
+  "desired_mood": ["welcoming", "desert", "community", "handmade"],
+  "must_include": ["reserved Hebrew lettering field", "large readable focal form", "broken ceramic tile language"],
+  "must_avoid": ["final AI-rendered Hebrew lettering", "tiny illustrative details", "colors not in palette"],
+  "viewing_distance_m": 15,
+  "granularity": "mixed",
+  "canvas": {
+    "type": "large natural stone",
+    "width_cm": null,
+    "height_cm": null,
+    "depth_cm": null,
+    "shape_notes": "Reference-aware fixture still needs final measured stone dimensions.",
+    "photo_paths": []
+  },
+  "reference_image_paths": ["examples/real_image_fixtures/images/artist_style_reference.png"],
+  "reference_image_roles": ["artist_style_reference"],
+  "desired_outputs": ["questions", "concepts", "image_prompts", "critique"],
+  "notes": "Fixture for testing reference-aware ideation and image generation. The image is an artist-style reference, not a literal construction target."
+}

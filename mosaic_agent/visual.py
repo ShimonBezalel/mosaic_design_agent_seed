@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import html
 import json
+import shutil
 from pathlib import Path
 
 from mosaic_agent.models import (
@@ -13,12 +14,15 @@ from mosaic_agent.models import (
     VisualCritique,
     VisualManifest,
     VisualManifestImage,
+    VisualManifestInputReference,
 )
 from mosaic_agent.prompt_compiler import CompiledVisualPrompt, compile_visual_prompt
 from mosaic_agent.providers.base import ImageProvider
 from mosaic_agent.providers.gemini_nano_banana import GeminiNanoBananaProvider
 from mosaic_agent.providers.openai_image import OpenAIImageProvider
+from mosaic_agent.providers.openai_responses_image import OpenAIResponsesImageProvider
 from mosaic_agent.providers.stub import StubImageProvider
+from mosaic_agent.reference_images import ensure_reference_images_exist
 
 
 def generate_visual_artifacts(
@@ -27,30 +31,40 @@ def generate_visual_artifacts(
     brief: ProjectBrief,
     palette: PaletteDB,
     out_dir: str | Path,
-    mode: str,
+    image_mode: str,
+    ideation_mode: str = "stub",
+    variants_per_concept: int = 2,
+    image_size: str = "1536x1024",
+    image_quality: str = "low",
+    image_model: str | None = None,
 ) -> VisualManifest:
-    provider = _provider_for_mode(mode)
+    if variants_per_concept < 1:
+        raise ValueError("variants_per_concept must be at least 1")
+    provider = _provider_for_mode(image_mode, image_size=image_size, image_quality=image_quality, image_model=image_model)
     output = Path(out_dir)
     images_dir = output / "images"
+    input_references = _copy_input_references(brief, output)
     manifest_images: list[VisualManifestImage] = []
 
     for concept_index, concept in enumerate(package.concepts, start=1):
-        for variant_index in (1, 2):
+        for variant_index in range(1, variants_per_concept + 1):
             compiled = compile_visual_prompt(concept, brief, palette, variant_index=variant_index)
             variant_id = f"variant_{variant_index:02d}"
             relative_path = f"images/concept_{concept_index:02d}_variant_{variant_index:02d}.png"
             output_path = output / relative_path
             request = ImageGenerationRequest(
-                provider=mode,
+                provider=image_mode,
                 concept_id=concept.concept_id,
                 variant_id=variant_id,
                 prompt=compiled.prompt,
                 negative_prompt=compiled.negative_prompt,
+                input_image_paths=[reference.source_path for reference in input_references],
+                input_image_roles=[reference.role for reference in input_references],
             )
             result = provider.generate(request, output_path)
             manifest_images.append(
                 VisualManifestImage(
-                    provider=mode,
+                    provider=image_mode,
                     concept_id=concept.concept_id,
                     concept_name=concept.name,
                     variant_id=variant_id,
@@ -65,10 +79,13 @@ def generate_visual_artifacts(
 
     manifest = VisualManifest(
         run_id=package.run_id,
-        provider=mode,
+        provider=image_mode,
+        ideation_mode=ideation_mode,  # type: ignore[arg-type]
+        image_mode=image_mode,  # type: ignore[arg-type]
         project_name=brief.project_name,
         location=brief.location,
         reference_image_paths=brief.reference_image_paths,
+        input_references=input_references,
         images=manifest_images,
     )
     output.mkdir(parents=True, exist_ok=True)
@@ -83,11 +100,19 @@ def generate_visual_artifacts(
     return manifest
 
 
-def _provider_for_mode(mode: str) -> ImageProvider:
+def _provider_for_mode(
+    mode: str,
+    *,
+    image_size: str,
+    image_quality: str,
+    image_model: str | None,
+) -> ImageProvider:
     if mode == "stub":
         return StubImageProvider()
     if mode == "openai-image":
-        return OpenAIImageProvider()
+        return OpenAIImageProvider(image_model=image_model, image_size=image_size, image_quality=image_quality)
+    if mode == "openai-responses-image":
+        return OpenAIResponsesImageProvider(image_model=image_model, image_size=image_size, image_quality=image_quality)
     if mode == "gemini-image":
         return GeminiNanoBananaProvider()
     raise ValueError(f"Unsupported visual provider mode: {mode}")
@@ -143,6 +168,9 @@ def _render_contact_sheet(
         "<li>No blocking questions detected.</li>"
     )
     assumption_items = "\n".join(f"<li>{html.escape(assumption)}</li>" for assumption in package.assumptions)
+    reference_cards = "\n".join(_render_reference_card(reference) for reference in manifest.input_references)
+    if not reference_cards:
+        reference_cards = "<p>No input references were provided.</p>"
 
     concept_sections: list[str] = []
     for concept in package.concepts:
@@ -184,7 +212,9 @@ def _render_contact_sheet(
     .swatch {{ border: 1px solid #cfc6b6; background: white; padding: 8px; min-width: 126px; font-size: 13px; }}
     .swatch span {{ display: block; height: 34px; background: var(--color); margin-bottom: 6px; border: 1px solid rgba(0,0,0,.2); }}
     .concept {{ border-top: 1px solid #d8d0c2; padding-top: 20px; }}
+    .warning {{ padding: 12px; border: 1px solid #a45c24; background: #fff3e6; font-weight: 700; }}
     .grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }}
+    .references {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }}
     figure {{ margin: 0; background: #fff; border: 1px solid #d8d0c2; padding: 12px; }}
     img {{ width: 100%; height: auto; display: block; background: #e9e1d3; }}
     figcaption {{ margin-top: 10px; font-weight: 600; }}
@@ -202,6 +232,9 @@ def _render_contact_sheet(
       <strong>Provider:</strong> {html.escape(manifest.provider)}<br>
       <strong>Reference images:</strong> {html.escape(reference_paths)}
     </div>
+    <p class="warning">Generated images are visual ideation only. They are not a construction-ready mosaic plan.</p>
+    <h2>Input References</h2>
+    <div class="references">{reference_cards}</div>
     <h2>Palette</h2>
     <div class="palette">{swatches}</div>
     <h2>Questions for Yael</h2>
@@ -214,6 +247,36 @@ def _render_contact_sheet(
 </body>
 </html>
 """
+
+
+def _copy_input_references(brief: ProjectBrief, output: Path) -> list[VisualManifestInputReference]:
+    references: list[VisualManifestInputReference] = []
+    destination_dir = output / "input_references"
+    destination_dir.mkdir(parents=True, exist_ok=True)
+    ensure_reference_images_exist(brief.reference_image_paths)
+    for index, (source_path, role) in enumerate(zip(brief.reference_image_paths, brief.reference_image_roles), start=1):
+        source = Path(source_path)
+        suffix = source.suffix or ".png"
+        relative_path = f"input_references/{role}_{index:02d}{suffix}"
+        shutil.copy2(source, output / relative_path)
+        references.append(
+            VisualManifestInputReference(
+                role=role,
+                source_path=source_path,
+                image_path=relative_path,
+            )
+        )
+    return references
+
+
+def _render_reference_card(reference: VisualManifestInputReference) -> str:
+    return f"""
+      <figure>
+        <img src="{html.escape(reference.image_path)}" alt="{html.escape(reference.role)}">
+        <figcaption>{html.escape(reference.role)}</figcaption>
+        <p><code>{html.escape(reference.source_path)}</code></p>
+      </figure>
+    """
 
 
 def _render_image_card(image: VisualManifestImage) -> str:

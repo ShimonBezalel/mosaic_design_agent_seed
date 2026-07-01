@@ -14,13 +14,19 @@ from mosaic_agent.providers.base import ProviderConfigurationError, ProviderRunt
 class OpenAIImageProvider:
     provider_name = "openai-image"
 
-    def __init__(self, api_key: str | None = None) -> None:
+    def __init__(
+        self,
+        api_key: str | None = None,
+        image_model: str | None = None,
+        image_size: str = "1536x1024",
+        image_quality: str = "low",
+    ) -> None:
         self.api_key = api_key or os.environ.get("OPENAI_API_KEY")
         if not self.api_key:
-            raise ProviderConfigurationError("OPENAI_API_KEY is required for --mode openai-image.")
-        self.model = os.environ.get("OPENAI_IMAGE_MODEL", "gpt-image-1.5")
-        self.size = os.environ.get("OPENAI_IMAGE_SIZE", "1024x1024")
-        self.quality = os.environ.get("OPENAI_IMAGE_QUALITY", "low")
+            raise ProviderConfigurationError("OPENAI_API_KEY is required for --image-mode openai-image.")
+        self.model = image_model or os.environ.get("OPENAI_IMAGE_MODEL", "gpt-image-2")
+        self.size = image_size or os.environ.get("OPENAI_IMAGE_SIZE", "1536x1024")
+        self.quality = image_quality or os.environ.get("OPENAI_IMAGE_QUALITY", "low")
 
     def generate(self, request: ImageGenerationRequest, output_path: Path) -> ImageGenerationResult:
         payload = {

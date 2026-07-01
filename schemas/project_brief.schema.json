@@ -27,6 +27,10 @@
       "additionalProperties": false
     },
     "reference_image_paths": {"type": "array", "items": {"type": "string"}},
+    "reference_image_roles": {
+      "type": "array",
+      "items": {"type": "string", "enum": ["artist_style_reference", "canvas_photo", "site_context", "palette_photo", "composition_sketch", "generated_brief_moodboard"]}
+    },
     "desired_outputs": {
       "type": "array",
       "items": {"type": "string", "enum": ["questions", "concepts", "image_prompts", "image_renders", "critique", "execution_notes"]}

@@ -39,13 +39,14 @@ Create a small Python package with Pydantic models matching `schemas/` and a CLI
 Make the agent run with deterministic fake tool responses. It should pass smoke tests without API keys.
 
 ### Phase 2 — OpenAI real loop
-Add OpenAI Agents SDK orchestration with function tools for palette lookup, question generation, concept planning, critique, and artifact export.
+Add OpenAI Responses API orchestration for structured concept planning with optional reference images, while keeping the provider layer narrow and testable.
 
 ### Phase 3 — Image provider adapter
 Add provider abstraction:
 
 - `StubImageProvider`
 - `OpenAIImageProvider`
+- `OpenAIResponsesImageProvider`
 - `GeminiNanoBananaProvider`
 
 Only the stub provider is required for the first CI pass.
@@ -61,7 +62,8 @@ Run the deterministic stub loop with no API keys:
 python -m mosaic_agent.demo \
   --palette examples/palette_db.example.json \
   --brief examples/project_brief.example.json \
-  --mode stub \
+  --ideation-mode stub \
+  --image-mode stub \
   --allow-assumptions \
   --out runs/demo_001
 ```
@@ -72,6 +74,8 @@ Expected outputs:
 - `runs/demo_001/artist_questions.md`
 - `runs/demo_001/image_prompts.md`
 - `runs/demo_001/critique.md`
+- `runs/demo_001/contact_sheet.html`
+- `runs/demo_001/visual_manifest.json`
 
 Stub mode makes no external API calls. If critical brief fields are missing and `--allow-assumptions` is not passed, the command writes `artist_questions.md` and stops before generating concepts. `run_trace.json` is not written by default in stub mode; platform traces or a later explicit trace mode can cover automated runs.
 
@@ -83,7 +87,8 @@ Generate the full visual artifact set with deterministic placeholder images:
 python -m mosaic_agent.demo \
   --palette examples/palette_db.example.json \
   --brief examples/project_brief.example.json \
-  --mode stub \
+  --ideation-mode stub \
+  --image-mode stub \
   --allow-assumptions \
   --out runs/visual_001_stub
 ```
@@ -94,12 +99,35 @@ Generate real OpenAI image variants when `OPENAI_API_KEY` is available:
 python -m mosaic_agent.demo \
   --palette examples/palette_db.example.json \
   --brief examples/project_brief.example.json \
-  --mode openai-image \
+  --ideation-mode stub \
+  --image-mode openai-image \
   --allow-assumptions \
+  --concept-limit 1 \
+  --variants-per-concept 1 \
+  --image-quality low \
+  --image-size 1024x1024 \
   --out runs/visual_001
 ```
 
-`--mode gemini-image` uses `GEMINI_API_KEY` or `GOOGLE_API_KEY`. Missing keys fail with a clear provider configuration message. Provider-side failures, such as billing limits, are reported without a Python stack trace.
+Generate a reference-aware canary with OpenAI ideation and the Responses image tool:
+
+```bash
+python -m mosaic_agent.demo \
+  --palette examples/palette_db.example.json \
+  --brief examples/real_image_fixtures/briefs/project_brief.real_image_fixture.json \
+  --ideation-mode openai \
+  --image-mode openai-responses-image \
+  --allow-assumptions \
+  --concept-limit 1 \
+  --variants-per-concept 1 \
+  --image-quality low \
+  --image-size 1536x1024 \
+  --out runs/openai_reference_canary_001
+```
+
+`--image-mode openai-image` uses the Images API for text-only canaries. `--image-mode openai-responses-image` uses the Responses API image generation tool and passes reference images as base64 input images. `--image-mode gemini-image` uses `GEMINI_API_KEY` or `GOOGLE_API_KEY`. Missing keys fail with a clear provider configuration message. Provider-side failures, such as billing limits, are reported without a Python stack trace.
+
+`--mode` still exists as a legacy shortcut and maps to `--ideation-mode stub` plus the selected image mode. Prefer the split flags for new work.
 
 Visual runs write:
 

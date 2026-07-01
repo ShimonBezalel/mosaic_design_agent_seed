@@ -22,7 +22,10 @@ def test_visual_prompt_includes_palette_and_mosaic_constraints():
     assert "visible grout" in compiled.prompt
     assert "hand-built" in compiled.prompt
     assert "proposal image, not a final exact construction plan" in compiled.prompt
-    assert "ברוכים הבאים" in compiled.prompt
+    assert "ברוכים הבאים" not in compiled.prompt
+    assert "reserved high-contrast lettering field" in compiled.prompt
+    assert "abstract placeholder letter blocks" in compiled.prompt
+    assert "manually redrawn/vectorized" in compiled.prompt
     assert "avoid pixel art" in compiled.negative_prompt
     assert "avoid photomosaic" in compiled.negative_prompt
     assert "overly tiny details" in compiled.negative_prompt

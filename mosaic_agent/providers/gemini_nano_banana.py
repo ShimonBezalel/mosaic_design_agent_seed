@@ -19,7 +19,7 @@ class GeminiNanoBananaProvider:
         self.api_key = api_key or os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
         if not self.api_key:
             raise ProviderConfigurationError(
-                "GEMINI_API_KEY or GOOGLE_API_KEY is required for --mode gemini-image."
+                "GEMINI_API_KEY or GOOGLE_API_KEY is required for --image-mode gemini-image."
             )
         self.model = os.environ.get("GEMINI_IMAGE_MODEL", "gemini-3.1-flash-image-preview")
 
