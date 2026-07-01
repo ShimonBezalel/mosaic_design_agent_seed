@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ProjectBrief",
+  "type": "object",
+  "required": ["project_name", "location", "intent", "canvas", "desired_outputs"],
+  "properties": {
+    "project_name": {"type": "string"},
+    "location": {"type": "string"},
+    "intent": {"type": "string"},
+    "required_text": {"type": "array", "items": {"type": "string"}},
+    "desired_mood": {"type": "array", "items": {"type": "string"}},
+    "must_include": {"type": "array", "items": {"type": "string"}},
+    "must_avoid": {"type": "array", "items": {"type": "string"}},
+    "viewing_distance_m": {"type": ["number", "null"]},
+    "granularity": {"type": "string", "enum": ["coarse", "medium", "fine", "mixed", "unknown"]},
+    "canvas": {
+      "type": "object",
+      "required": ["type"],
+      "properties": {
+        "type": {"type": "string"},
+        "width_cm": {"type": ["number", "null"]},
+        "height_cm": {"type": ["number", "null"]},
+        "depth_cm": {"type": ["number", "null"]},
+        "shape_notes": {"type": "string"},
+        "photo_paths": {"type": "array", "items": {"type": "string"}}
+      },
+      "additionalProperties": false
+    },
+    "reference_image_paths": {"type": "array", "items": {"type": "string"}},
+    "desired_outputs": {
+      "type": "array",
+      "items": {"type": "string", "enum": ["questions", "concepts", "image_prompts", "image_renders", "critique", "execution_notes"]}
+    },
+    "notes": {"type": "string"}
+  },
+  "additionalProperties": false
+}

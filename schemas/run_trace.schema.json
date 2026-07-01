@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "RunTrace",
+  "type": "object",
+  "required": ["run_id", "events"],
+  "properties": {
+    "run_id": {"type": "string"},
+    "events": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["event_type", "timestamp", "summary"],
+        "properties": {
+          "event_type": {"type": "string"},
+          "timestamp": {"type": "string"},
+          "summary": {"type": "string"},
+          "payload": {"type": "object"}
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

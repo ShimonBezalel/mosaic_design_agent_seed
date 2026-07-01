@@ -1,0 +1,28 @@
+mode: stub
+
+providers:
+  image:
+    default: stub
+    available:
+      stub:
+        class: StubImageProvider
+        requires_api_key: false
+      openai:
+        class: OpenAIImageProvider
+        requires_api_key: true
+        env_var: OPENAI_API_KEY
+      gemini_nano_banana:
+        class: GeminiNanoBananaProvider
+        requires_api_key: true
+        env_var: GEMINI_API_KEY
+
+agent:
+  runtime: openai_agents_sdk
+  model: gpt-5.5
+  tracing: true
+  require_tool_approval_for_paid_calls: true
+
+exports:
+  write_json: true
+  write_markdown: true
+  write_trace: true

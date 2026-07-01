@@ -1,0 +1,22 @@
+{
+  "project_name": "Town Entrance Stone",
+  "location": "Har Amasa entrance",
+  "intent": "Create a welcoming public mosaic for the giant stone at the town entrance. It should feel local, warm, handmade, and connected to desert landscape and community life.",
+  "required_text": ["ברוכים הבאים", "הר עמשא"],
+  "desired_mood": ["welcoming", "desert", "warm", "community", "optimistic"],
+  "must_include": ["readable Hebrew text", "local landscape feeling", "strong focal symbol"],
+  "must_avoid": ["too many tiny details", "generic stock-art feeling", "colors not in palette"],
+  "viewing_distance_m": 15,
+  "granularity": "mixed",
+  "canvas": {
+    "type": "large natural stone",
+    "width_cm": null,
+    "height_cm": null,
+    "depth_cm": null,
+    "shape_notes": "Actual stone dimensions and face geometry are still needed.",
+    "photo_paths": []
+  },
+  "reference_image_paths": ["assets/reference_images/yael_mosaic_sample_01.png"],
+  "desired_outputs": ["questions", "concepts", "image_prompts", "critique"],
+  "notes": "First demo should emphasize the agentic loop, not final execution plans. Palette DB is a placeholder until Yael provides real tile colors."
+}

@@ -1,0 +1,21 @@
+{
+  "version": "0.1",
+  "source": "Demo palette approximated from the uploaded sample image; replace with Yael's real tile DB.",
+  "notes": "Hex-only is enough for first-pass ideation. Inventory levels are placeholders.",
+  "tiles": [
+    {"tile_id": "terracotta_orange_01", "name": "terracotta orange", "hex": "#C95A2A", "inventory_level": "high", "surface": "matte", "material": "ceramic", "break_profile": "mixed", "preferred_uses": ["desert ground", "warm sky", "borders"], "avoid_uses": [], "notes": "Strong local/desert color."},
+    {"tile_id": "burnt_orange_02", "name": "burnt orange", "hex": "#9E3F24", "inventory_level": "medium", "surface": "matte", "material": "ceramic", "break_profile": "medium", "preferred_uses": ["shadow", "earth", "outline"], "avoid_uses": ["small text"], "notes": "Good for depth."},
+    {"tile_id": "dusty_pink_01", "name": "dusty pink", "hex": "#C9828C", "inventory_level": "medium", "surface": "matte", "material": "ceramic", "break_profile": "medium", "preferred_uses": ["sunset gradient", "soft transitions"], "avoid_uses": [], "notes": "Useful transition from sky to earth."},
+    {"tile_id": "lavender_gray_01", "name": "lavender gray", "hex": "#8D728B", "inventory_level": "medium", "surface": "matte", "material": "ceramic", "break_profile": "mixed", "preferred_uses": ["mountain shadow", "evening sky"], "avoid_uses": [], "notes": "Can calm warm palette."},
+    {"tile_id": "deep_blue_01", "name": "deep blue", "hex": "#1E4E8C", "inventory_level": "low", "surface": "gloss", "material": "ceramic", "break_profile": "medium", "preferred_uses": ["accent arcs", "water", "night sky"], "avoid_uses": ["large background"], "notes": "Use sparingly."},
+    {"tile_id": "turquoise_01", "name": "turquoise", "hex": "#2FA7B1", "inventory_level": "medium", "surface": "gloss", "material": "ceramic", "break_profile": "medium", "preferred_uses": ["rainbow", "accent", "oasis"], "avoid_uses": [], "notes": "High energy accent."},
+    {"tile_id": "pale_mint_01", "name": "pale mint", "hex": "#B7D8C6", "inventory_level": "low", "surface": "gloss", "material": "ceramic", "break_profile": "small", "preferred_uses": ["highlight", "separation lines"], "avoid_uses": ["large field"], "notes": "Good boundary color."},
+    {"tile_id": "sun_yellow_01", "name": "sun yellow", "hex": "#F1C13A", "inventory_level": "medium", "surface": "gloss", "material": "ceramic", "break_profile": "small", "preferred_uses": ["sun", "focal highlights"], "avoid_uses": ["fine text"], "notes": "Use for focal glow."},
+    {"tile_id": "cream_01", "name": "warm cream", "hex": "#E9D7B6", "inventory_level": "high", "surface": "matte", "material": "ceramic", "break_profile": "mixed", "preferred_uses": ["text", "paths", "highlights"], "avoid_uses": [], "notes": "High readability."},
+    {"tile_id": "sand_01", "name": "sand", "hex": "#D6B48F", "inventory_level": "high", "surface": "matte", "material": "ceramic", "break_profile": "large", "preferred_uses": ["desert", "negative space", "large regions"], "avoid_uses": [], "notes": "Safe large-area tile."},
+    {"tile_id": "olive_green_01", "name": "olive green", "hex": "#5F7F2E", "inventory_level": "medium", "surface": "matte", "material": "ceramic", "break_profile": "medium", "preferred_uses": ["trees", "local vegetation"], "avoid_uses": [], "notes": "Natural accent."},
+    {"tile_id": "deep_green_01", "name": "deep green", "hex": "#23401E", "inventory_level": "medium", "surface": "gloss", "material": "ceramic", "break_profile": "splintery", "preferred_uses": ["tree shadow", "dark vegetation"], "avoid_uses": ["large flat areas"], "notes": "Strong contrast."},
+    {"tile_id": "dark_brown_01", "name": "dark brown", "hex": "#3B2016", "inventory_level": "medium", "surface": "matte", "material": "ceramic", "break_profile": "mixed", "preferred_uses": ["trunks", "outlines", "shadow"], "avoid_uses": ["dominant field"], "notes": "Useful for structure."},
+    {"tile_id": "off_white_01", "name": "off white", "hex": "#F0E9D8", "inventory_level": "medium", "surface": "gloss", "material": "ceramic", "break_profile": "medium", "preferred_uses": ["text", "symbol edges", "specular highlights"], "avoid_uses": [], "notes": "Best for Hebrew letters."}
+  ]
+}
