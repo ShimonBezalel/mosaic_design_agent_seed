@@ -1,12 +1,22 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "mosaic-design-agent-seed"
 version = "0.1.0"
 description = "Deterministic first prototype for a mosaic design agent loop."
 requires-python = ">=3.10"
 dependencies = [
+  "gradio>=5,<7",
   "pydantic>=2",
   "jsonschema>=4",
+  "openai>=1",
+  "pillow>=10",
 ]
+
+[tool.setuptools.packages.find]
+include = ["mosaic_agent*", "mosaic_workbench*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -11,6 +11,51 @@ The goal is not to implement the mosaic compiler yet. The first build should pro
 5. return structured ideation packages: composition briefs, image-generation prompts, palette constraints, critique notes, and next questions;
 6. run the same loop in stub mode for fast smoke testing and real mode for tomorrow's Yael experiment.
 
+## Local Gradio workbench
+
+Install the package and launch the interactive workbench:
+
+```bash
+python -m pip install -e .
+python -m mosaic_workbench.app --demo
+```
+
+Open `http://127.0.0.1:7860`. Without `--demo`, the same command starts with an empty session:
+
+```bash
+python -m mosaic_workbench.app
+```
+
+The workbench supports:
+
+- palette DB loading and working palette selection;
+- brief entry without editing JSON;
+- base canvas, site context, style reference, and composition sketch uploads;
+- uploaded masks or browser-drawn masks;
+- automatic PNG mask normalization, alpha-channel handling, and overlay preview;
+- three stub or OpenAI-generated concept directions;
+- concept selection;
+- one or three masked edit variants;
+- session export with brief, concept, prompts, critique, base image, mask, references, variants, and manifest.
+
+Stub mode needs no API key. Real concept ideation and masked edits use:
+
+```bash
+export OPENAI_API_KEY="..."
+```
+
+Choose `openai` under **Ideation mode** for real concept planning and `openai-edit` under **Image edit mode** for a real masked Image API edit.
+
+Mask rules:
+
+- the normalized mask always matches the base image dimensions;
+- uploaded alpha masks use transparent pixels as the editable region;
+- uploaded black/white masks use white as the editable region;
+- browser-drawn strokes become the editable region;
+- the normalized mask is saved as an RGBA PNG.
+
+Generated images are visual ideation only. They are not a construction-ready mosaic plan. Hebrew lettering is deliberately left as a blank high-contrast field for manual drawing or vectorization.
+
 ## Recommended runtime choice
 
 Use OpenAI Agents SDK as the initial runtime. Reasons:
@@ -139,7 +184,7 @@ Visual runs write:
 Run tests with:
 
 ```bash
-pytest
+python -m pytest
 ```
 
 ## Seed contents

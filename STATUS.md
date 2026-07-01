@@ -1,18 +1,13 @@
-# Seed Status
+# Current Status
 
-Prepared as a design/dev seed only. No implementation has been written.
+The repo now includes:
 
-Included:
+- typed brief, palette, concept, visual manifest, and interactive session models;
+- deterministic and OpenAI concept ideation;
+- stub, OpenAI Images, OpenAI Responses image, Gemini, and OpenAI masked-edit adapters;
+- a local Gradio workbench at `python -m mosaic_workbench.app`;
+- mask upload/drawing, normalization, alpha handling, and overlay preview;
+- concept selection, masked variant generation, and portable session export;
+- offline stub integration tests and opt-in paid provider canaries.
 
-- research notes;
-- architecture and agent loop spec;
-- schemas;
-- example palette and brief;
-- agentic skills;
-- Codex implementation prompt;
-- phased task list;
-- reference image asset.
-
-Next action for Codex:
-
-Implement Phase 0 and Phase 1 only, with tests, before touching real APIs.
+The current milestone remains an ideation workbench, not a construction-ready mosaic compiler.

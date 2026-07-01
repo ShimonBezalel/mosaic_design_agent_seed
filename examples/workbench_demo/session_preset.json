@@ -1,0 +1,57 @@
+{
+  "project_name": "Har Amasa Entrance Stone Workbench",
+  "location": "Har Amasa entrance",
+  "intent": "Explore a welcoming broken-tile mosaic on the uploaded entrance boulder. Keep the stone and site recognizable while testing broad desert, path, and community compositions.",
+  "required_text": [
+    "ברוכים הבאים",
+    "הר עמשא"
+  ],
+  "desired_mood": [
+    "welcoming",
+    "desert",
+    "warm",
+    "handmade",
+    "local"
+  ],
+  "must_include": [
+    "large readable focal form",
+    "blank field reserved for later Hebrew lettering",
+    "visible grout and negative space"
+  ],
+  "must_avoid": [
+    "fake Hebrew",
+    "pseudo-text",
+    "tiny illustrative details",
+    "colors outside the selected palette"
+  ],
+  "viewing_distance_m": 15,
+  "granularity": "mixed",
+  "canvas": {
+    "type": "large natural entrance boulder",
+    "width_cm": null,
+    "height_cm": null,
+    "depth_cm": null,
+    "shape_notes": "Use the bundled base_canvas.png crop for visual ideation; confirm physical measurements before construction planning.",
+    "photo_paths": [
+      "examples/workbench_demo/base_canvas.png"
+    ]
+  },
+  "reference_image_paths": [
+    "examples/workbench_demo/style_reference.png",
+    "examples/workbench_demo/site_context.png",
+    "examples/workbench_demo/composition_sketch.png"
+  ],
+  "reference_image_roles": [
+    "artist_style_reference",
+    "site_context",
+    "composition_sketch"
+  ],
+  "desired_outputs": [
+    "questions",
+    "concepts",
+    "image_prompts",
+    "image_renders",
+    "critique"
+  ],
+  "notes": "Demo preset for the local Gradio workbench. Generated outputs are visual ideation only."
+}
