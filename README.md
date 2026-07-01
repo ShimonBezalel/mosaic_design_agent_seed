@@ -75,6 +75,39 @@ Expected outputs:
 
 Stub mode makes no external API calls. If critical brief fields are missing and `--allow-assumptions` is not passed, the command writes `artist_questions.md` and stops before generating concepts. `run_trace.json` is not written by default in stub mode; platform traces or a later explicit trace mode can cover automated runs.
 
+## Visual contact sheet
+
+Generate the full visual artifact set with deterministic placeholder images:
+
+```bash
+python -m mosaic_agent.demo \
+  --palette examples/palette_db.example.json \
+  --brief examples/project_brief.example.json \
+  --mode stub \
+  --allow-assumptions \
+  --out runs/visual_001_stub
+```
+
+Generate real OpenAI image variants when `OPENAI_API_KEY` is available:
+
+```bash
+python -m mosaic_agent.demo \
+  --palette examples/palette_db.example.json \
+  --brief examples/project_brief.example.json \
+  --mode openai-image \
+  --allow-assumptions \
+  --out runs/visual_001
+```
+
+`--mode gemini-image` uses `GEMINI_API_KEY` or `GOOGLE_API_KEY`. Missing keys fail with a clear provider configuration message. Provider-side failures, such as billing limits, are reported without a Python stack trace.
+
+Visual runs write:
+
+- `contact_sheet.html`
+- `visual_manifest.json`
+- six `images/concept_XX_variant_YY.png` files
+- refreshed `image_prompts.md`, `critique.md`, and `artist_questions.md`
+
 Run tests with:
 
 ```bash

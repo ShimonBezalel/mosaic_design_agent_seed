@@ -8,6 +8,8 @@ from mosaic_agent.intake import MissingCriticalFieldsError
 from mosaic_agent.load import load_brief, load_palette
 from mosaic_agent.loop import run_agent_loop
 from mosaic_agent.models import ConceptPackage
+from mosaic_agent.providers.base import ProviderConfigurationError, ProviderRuntimeError
+from mosaic_agent.visual import generate_visual_artifacts
 
 
 def run_demo(
@@ -22,6 +24,7 @@ def run_demo(
     palette = load_palette(palette_path)
     package = run_agent_loop(brief=brief, palette=palette, mode=mode, allow_assumptions=allow_assumptions)
     export_artifacts(package, out_dir)
+    generate_visual_artifacts(package=package, brief=brief, palette=palette, out_dir=out_dir, mode=mode)
     return package
 
 
@@ -29,7 +32,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Run the mosaic design agent demo loop.")
     parser.add_argument("--palette", required=True, type=Path, help="Path to palette DB JSON.")
     parser.add_argument("--brief", required=True, type=Path, help="Path to project brief JSON.")
-    parser.add_argument("--mode", default="stub", choices=["stub"], help="Execution mode.")
+    parser.add_argument("--mode", default="stub", choices=["stub", "openai-image", "gemini-image"], help="Execution mode.")
     parser.add_argument("--allow-assumptions", action="store_true", help="Continue with explicit assumptions.")
     parser.add_argument("--out", required=True, type=Path, help="Output directory for artifacts.")
     return parser
@@ -56,8 +59,12 @@ def main(argv: list[str] | None = None) -> int:
             f"or answer questions in {args.out / 'artist_questions.md'}"
         )
         return 2
+    except ProviderConfigurationError as error:
+        parser.exit(2, f"Provider configuration error: {error}\n")
+    except ProviderRuntimeError as error:
+        parser.exit(1, f"Provider runtime error: {error}\n")
 
-    print(f"Exported {len(package.concepts)} concepts to {args.out}")
+    print(f"Exported {len(package.concepts)} concepts and visual contact sheet to {args.out}")
     return 0
 
 

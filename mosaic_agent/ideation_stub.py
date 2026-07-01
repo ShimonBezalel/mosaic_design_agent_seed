@@ -1,9 +1,8 @@
 from __future__ import annotations
 
 from mosaic_agent.critique import build_stub_critique
-from mosaic_agent.models import Concept, ImageGenerationRequest, ImagePrompts, PaletteDB, ProjectBrief
+from mosaic_agent.models import Concept, ImagePrompts, PaletteDB, ProjectBrief
 from mosaic_agent.palette import select_existing_tile_ids, validate_tile_ids
-from mosaic_agent.providers.base import ImageProvider
 
 
 COMMON_NEGATIVE_PROMPT = (
@@ -12,11 +11,11 @@ COMMON_NEGATIVE_PROMPT = (
 )
 
 
-def generate_stub_concepts(brief: ProjectBrief, palette: PaletteDB, image_provider: ImageProvider) -> list[Concept]:
+def generate_stub_concepts(brief: ProjectBrief, palette: PaletteDB) -> list[Concept]:
     concepts = [
-        _desert_sunrise(brief, palette, image_provider),
-        _path_into_community(brief, palette, image_provider),
-        _typography_ribbon(brief, palette, image_provider),
+        _desert_sunrise(brief, palette),
+        _path_into_community(brief, palette),
+        _typography_ribbon(brief, palette),
     ]
     for concept in concepts:
         validate_tile_ids(concept.palette_tile_ids, palette)
@@ -45,17 +44,7 @@ def _build_prompts(name: str, brief: ProjectBrief, palette: PaletteDB, compositi
     return ImagePrompts(openai=openai, gemini_nano_banana=gemini, negative_prompt=COMMON_NEGATIVE_PROMPT)
 
 
-def _image_result(provider: ImageProvider, concept_id: str, prompts: ImagePrompts) -> list[dict[str, object]]:
-    request = ImageGenerationRequest(
-        provider="stub",
-        concept_id=concept_id,
-        prompt=prompts.openai,
-        negative_prompt=prompts.negative_prompt,
-    )
-    return [provider.generate(request).model_dump(mode="json")]
-
-
-def _desert_sunrise(brief: ProjectBrief, palette: PaletteDB, image_provider: ImageProvider) -> Concept:
+def _desert_sunrise(brief: ProjectBrief, palette: PaletteDB) -> Concept:
     name = "Desert Sunrise Welcome"
     concept_id = "concept_01_desert_sunrise_welcome"
     tile_ids = select_existing_tile_ids(
@@ -92,12 +81,11 @@ def _desert_sunrise(brief: ProjectBrief, palette: PaletteDB, image_provider: Ima
         ),
         palette_tile_ids=tile_ids,
         image_prompts=prompts,
-        image_results=_image_result(image_provider, concept_id, prompts),
         critique=build_stub_critique(name, brief),
     )
 
 
-def _path_into_community(brief: ProjectBrief, palette: PaletteDB, image_provider: ImageProvider) -> Concept:
+def _path_into_community(brief: ProjectBrief, palette: PaletteDB) -> Concept:
     name = "Path Into Community"
     concept_id = "concept_02_path_into_community"
     tile_ids = select_existing_tile_ids(
@@ -134,12 +122,11 @@ def _path_into_community(brief: ProjectBrief, palette: PaletteDB, image_provider
         ),
         palette_tile_ids=tile_ids,
         image_prompts=prompts,
-        image_results=_image_result(image_provider, concept_id, prompts),
         critique=build_stub_critique(name, brief),
     )
 
 
-def _typography_ribbon(brief: ProjectBrief, palette: PaletteDB, image_provider: ImageProvider) -> Concept:
+def _typography_ribbon(brief: ProjectBrief, palette: PaletteDB) -> Concept:
     name = "Typography Stone Ribbon"
     concept_id = "concept_03_typography_stone_ribbon"
     tile_ids = select_existing_tile_ids(
@@ -175,6 +162,5 @@ def _typography_ribbon(brief: ProjectBrief, palette: PaletteDB, image_provider: 
         ),
         palette_tile_ids=tile_ids,
         image_prompts=prompts,
-        image_results=_image_result(image_provider, concept_id, prompts),
         critique=build_stub_critique(name, brief),
     )

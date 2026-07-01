@@ -74,6 +74,7 @@ class ImagePrompts(StrictModel):
 class ImageGenerationRequest(StrictModel):
     provider: str
     concept_id: str
+    variant_id: str = "variant_01"
     prompt: str
     negative_prompt: str = ""
 
@@ -81,7 +82,9 @@ class ImageGenerationRequest(StrictModel):
 class ImageGenerationResult(StrictModel):
     provider: str
     concept_id: str
+    variant_id: str = "variant_01"
     status: str
+    image_path: str = ""
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -117,12 +120,43 @@ class Concept(StrictModel):
 class ConceptPackage(StrictModel):
     run_id: str
     project_name: str
-    mode: Literal["stub", "real_model_stub_images", "real_images"] = "stub"
+    mode: Literal["stub", "real_model_stub_images", "real_images", "openai-image", "gemini-image"] = "stub"
     assumptions: list[str]
     questions: list[str]
     palette_summary: str = ""
     concepts: list[Concept]
     recommended_next_step: str
+
+
+class VisualCritique(StrictModel):
+    strongest_visual_idea: str
+    palette_fit: str
+    feasibility_for_broken_tiles: str
+    readability_from_distance: str
+    text_risk: str
+    ask_yael: str
+
+
+class VisualManifestImage(StrictModel):
+    provider: str
+    concept_id: str
+    concept_name: str
+    variant_id: str
+    image_path: str
+    prompt: str
+    negative_prompt: str
+    status: str
+    metadata: dict[str, Any] = Field(default_factory=dict)
+    critique: VisualCritique
+
+
+class VisualManifest(StrictModel):
+    run_id: str
+    provider: str
+    project_name: str
+    location: str
+    reference_image_paths: list[str] = Field(default_factory=list)
+    images: list[VisualManifestImage]
 
 
 class RunTraceEvent(StrictModel):

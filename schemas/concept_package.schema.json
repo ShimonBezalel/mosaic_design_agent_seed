@@ -6,7 +6,7 @@
   "properties": {
     "run_id": {"type": "string"},
     "project_name": {"type": "string"},
-    "mode": {"type": "string", "enum": ["stub", "real_model_stub_images", "real_images"]},
+    "mode": {"type": "string", "enum": ["stub", "real_model_stub_images", "real_images", "openai-image", "gemini-image"]},
     "assumptions": {"type": "array", "items": {"type": "string"}},
     "questions": {"type": "array", "items": {"type": "string"}},
     "palette_summary": {"type": "string"},
