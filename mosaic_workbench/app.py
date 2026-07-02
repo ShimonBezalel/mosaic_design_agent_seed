@@ -12,7 +12,9 @@ from PIL import Image
 from mosaic_agent.load import load_brief, load_palette
 from mosaic_agent.models import Canvas, ProjectBrief
 from mosaic_agent.session_models import InteractiveSession
+from mosaic_agent.tile_map_export import DISCLAIMER, export_compile_archive
 from mosaic_workbench.controllers import (
+    compile_session_tile_map,
     create_session,
     generate_concepts,
     generate_variants,
@@ -30,11 +32,13 @@ DEMO_PRESET = ROOT / "examples" / "workbench_demo" / "session_preset.json"
 def build_app(*, demo: bool = False) -> gr.Blocks:
     defaults = _demo_defaults() if demo else {}
 
-    with gr.Blocks(title="Mosaic Ideation Workbench", fill_width=True) as app:
+    with gr.Blocks(title="Mosaic Studio Workbench", fill_width=True) as app:
         session_state = gr.State(value=None)
         gr.Markdown(
-            "# Mosaic Ideation Workbench\n"
-            "**Generated images are visual ideation only. They are not a construction-ready mosaic plan.**"
+            "# Mosaic Studio Workbench\n"
+            "Optional visual ideation, deterministic palette compilation, and planning export.\n\n"
+            "**Generated images are visual ideation only.**  \n"
+            f"**{DISCLAIMER}**"
         )
         with gr.Row():
             load_demo = gr.Button("Load demo session")
@@ -153,7 +157,7 @@ def build_app(*, demo: bool = False) -> gr.Blocks:
                     label="Ideation mode",
                 )
                 generate_concepts_button = gr.Button("Generate concepts", variant="primary")
-            concept_cards = gr.Markdown("No concepts generated yet.")
+            concept_cards = gr.HTML("No concepts generated yet.")
             concept_selector = gr.Radio(label="Select one concept", choices=[])
             selected_concept_status = gr.Markdown()
 
@@ -190,10 +194,105 @@ def build_app(*, demo: bool = False) -> gr.Blocks:
                 export_archive = gr.File(label="Export archive")
             export_status = gr.Markdown()
 
+        with gr.Tab("5. Compile to Tile Map"):
+            gr.Markdown(
+                "Compile an accepted image into deterministic regions using only selected studio tiles. "
+                f"**{DISCLAIMER}**"
+            )
+            compile_palette_swatches = gr.HTML(label="Selected compile palette")
+            with gr.Row():
+                compile_source = gr.Radio(
+                    choices=[
+                        ("Upload finalized source image", "upload"),
+                        ("Use latest generated variant", "latest_variant"),
+                        ("Use base canvas image", "base_canvas"),
+                    ],
+                    value="upload",
+                    label="Compile source",
+                )
+                finalized_source = gr.Image(
+                    type="filepath",
+                    label="Finalized source image",
+                    sources=["upload", "clipboard"],
+                )
+                compile_mask = gr.Image(
+                    type="filepath",
+                    image_mode="RGBA",
+                    format="png",
+                    label="Compile-specific mask",
+                    sources=["upload", "clipboard"],
+                )
+            whole_image = gr.Checkbox(value=False, label="Whole image")
+            with gr.Row():
+                compile_granularity = gr.Radio(
+                    choices=["coarse", "medium", "fine"],
+                    value="medium",
+                    label="Compile granularity",
+                )
+                max_colors = gr.Number(value=None, precision=0, label="Max colors")
+                min_region_area = gr.Number(
+                    value=64,
+                    precision=0,
+                    minimum=1,
+                    label="Minimum region area (px)",
+                )
+                boundary_smoothing = gr.Radio(
+                    choices=["none", "light", "medium"],
+                    value="light",
+                    label="Boundary smoothing",
+                )
+            with gr.Row():
+                merge_tiny_regions = gr.Checkbox(value=True, label="Merge tiny regions")
+                strict_palette = gr.Checkbox(
+                    value=True,
+                    label="Strict palette",
+                    interactive=False,
+                )
+                physical_width = gr.Number(value=None, label="Physical width (cm)")
+                physical_height = gr.Number(value=None, label="Physical height (cm)")
+            with gr.Row():
+                compile_button = gr.Button("Compile to Tile Map", variant="primary")
+                export_compile_button = gr.Button("Export Compile Bundle")
+            with gr.Row():
+                palette_map_preview = gr.Image(type="filepath", label="Palette map")
+                region_labels_preview = gr.Image(type="filepath", label="Numbered region map")
+                boundaries_preview = gr.Image(type="filepath", label="Region boundaries")
+            tile_legend = gr.Dataframe(
+                headers=[
+                    "Tile ID",
+                    "Name",
+                    "Hex",
+                    "Pixels",
+                    "% of mask",
+                    "Area cm2",
+                    "Regions",
+                    "Mean Delta E",
+                    "Max Delta E",
+                ],
+                interactive=False,
+                wrap=True,
+                label="Tile legend",
+            )
+            qa_warnings = gr.Markdown()
+            with gr.Row():
+                compile_report = gr.File(label="Compile report")
+                compile_archive = gr.File(label="Compile bundle")
+            compile_status = gr.Markdown()
+
         load_palette_button.click(
             _load_palette_ui,
             inputs=[palette_path],
             outputs=[palette_swatches, selected_palette_ids, session_status],
+        )
+        load_palette_button.click(
+            _selected_palette_swatches_ui,
+            inputs=[palette_path, selected_palette_ids],
+            outputs=[compile_palette_swatches],
+        )
+        selected_palette_ids.change(
+            _selected_palette_swatches_ui,
+            inputs=[palette_path, selected_palette_ids],
+            outputs=[compile_palette_swatches],
         )
         base_image.change(_seed_editor, inputs=[base_image], outputs=[drawn_mask])
         prepare_session.click(
@@ -256,6 +355,50 @@ def build_app(*, demo: bool = False) -> gr.Blocks:
             inputs=[session_state],
             outputs=[export_archive, export_status],
         )
+        compile_button.click(
+            _compile_tile_map_ui,
+            inputs=[
+                session_state,
+                palette_path,
+                selected_palette_ids,
+                project_name,
+                location,
+                intent,
+                required_text,
+                mood,
+                must_include,
+                must_avoid,
+                viewing_distance,
+                granularity,
+                notes,
+                compile_source,
+                finalized_source,
+                compile_mask,
+                whole_image,
+                compile_granularity,
+                max_colors,
+                min_region_area,
+                boundary_smoothing,
+                merge_tiny_regions,
+                physical_width,
+                physical_height,
+            ],
+            outputs=[
+                session_state,
+                palette_map_preview,
+                region_labels_preview,
+                boundaries_preview,
+                tile_legend,
+                qa_warnings,
+                compile_report,
+                compile_status,
+            ],
+        )
+        export_compile_button.click(
+            _export_compile_ui,
+            inputs=[session_state],
+            outputs=[compile_archive, compile_status],
+        )
         load_demo.click(
             _load_demo_ui,
             outputs=[
@@ -303,6 +446,27 @@ def _load_palette_ui(palette_path: str):
     )
     ids = [tile.tile_id for tile in palette.tiles]
     return swatches, gr.update(choices=ids, value=ids), f"Loaded {len(ids)} palette colors."
+
+
+def _selected_palette_swatches_ui(palette_path: str, selected_ids: list[str] | None) -> str:
+    try:
+        palette = load_palette(palette_path)
+    except Exception:
+        return ""
+    selected = set(selected_ids or [])
+    tiles = [tile for tile in palette.tiles if tile.tile_id in selected]
+    if not tiles:
+        return "<p>No palette colors selected.</p>"
+    return "".join(
+        (
+            "<span style='display:inline-flex;align-items:center;gap:6px;margin:3px 6px 3px 0;"
+            "padding:4px 6px;border:1px solid #bbb'>"
+            f"<span style='width:20px;height:20px;background:{html.escape(tile.hex)};"
+            "display:inline-block'></span>"
+            f"<code>{html.escape(tile.tile_id)}</code></span>"
+        )
+        for tile in tiles
+    )
 
 
 def _seed_editor(base_image_path: str | None):
@@ -444,6 +608,134 @@ def _export_session_ui(state: dict | None):
         raise gr.Error(str(error)) from error
 
 
+def _compile_tile_map_ui(
+    state: dict | None,
+    palette_path: str,
+    selected_ids: list[str],
+    project_name: str,
+    location: str,
+    intent: str,
+    required_text: str,
+    mood: str,
+    must_include: str,
+    must_avoid: str,
+    viewing_distance: float | None,
+    brief_granularity: str,
+    notes: str,
+    source_choice: str,
+    finalized_source_path: str | None,
+    compile_mask_path: str | None,
+    whole_image: bool,
+    compile_granularity: str,
+    max_colors: float | int | None,
+    min_region_area_px: float | int,
+    boundary_smoothing: str,
+    merge_tiny_regions: bool,
+    physical_width_cm: float | None,
+    physical_height_cm: float | None,
+):
+    try:
+        if not selected_ids:
+            raise ValueError("Select at least one palette color before compiling.")
+        if state:
+            session = InteractiveSession.model_validate(state).model_copy(
+                update={
+                    "palette_db_path": palette_path,
+                    "selected_palette_ids": selected_ids,
+                }
+            )
+        else:
+            brief = _brief_from_form(
+                project_name=project_name,
+                location=location,
+                intent=intent,
+                required_text=required_text,
+                mood=mood,
+                must_include=must_include,
+                must_avoid=must_avoid,
+                viewing_distance=viewing_distance,
+                granularity=brief_granularity,
+                notes=notes,
+            )
+            session = InteractiveSession(
+                session_id=uuid4().hex[:12],
+                brief=brief,
+                palette_db_path=palette_path,
+                selected_palette_ids=selected_ids,
+            )
+        normalized_max_colors = int(max_colors) if max_colors not in (None, 0) else None
+        session = compile_session_tile_map(
+            session,
+            source_choice=source_choice,
+            uploaded_source_path=finalized_source_path,
+            compile_mask_path=compile_mask_path,
+            whole_image=whole_image,
+            max_colors=normalized_max_colors,
+            granularity=compile_granularity,
+            min_region_area_px=int(min_region_area_px),
+            boundary_smoothing=boundary_smoothing,
+            merge_tiny_regions=merge_tiny_regions,
+            physical_width_cm=physical_width_cm,
+            physical_height_cm=physical_height_cm,
+            out_root=ROOT / "runs" / "workbench",
+        )
+        result = session.latest_compile_result
+        assert result is not None
+        legend = [
+            [
+                item.tile_id,
+                item.tile_name,
+                item.hex,
+                item.pixel_count,
+                round(item.percent_of_mask, 2),
+                None
+                if item.estimated_area_cm2 is None
+                else round(item.estimated_area_cm2, 2),
+                item.region_count,
+                round(item.mean_delta_e, 2),
+                round(item.max_delta_e, 2),
+            ]
+            for item in result.color_usage
+        ]
+        warning_lines = [f"**{DISCLAIMER}**", "", "### QA warnings", ""]
+        warning_lines.extend(
+            f"- {warning}" for warning in result.warnings
+        )
+        if not result.warnings:
+            warning_lines.append("- No QA warnings.")
+        status = (
+            f"Compiled {result.region_count} regions using {result.color_count} studio colors. "
+            f"Signature `{result.run_id}`."
+        )
+        return (
+            session.model_dump(mode="json"),
+            result.palette_map_path,
+            result.region_labels_path,
+            result.region_boundaries_path,
+            legend,
+            "\n".join(warning_lines),
+            result.compile_report_html_path,
+            status,
+        )
+    except Exception as error:
+        raise gr.Error(str(error)) from error
+
+
+def _export_compile_ui(state: dict | None):
+    try:
+        session = _session_from_state(state)
+        if session.latest_compile_result is None:
+            raise ValueError("Compile a tile map before exporting the compile bundle.")
+        export_dir = ROOT / "runs" / "workbench_exports" / session.session_id
+        archive_path = export_compile_archive(
+            session.latest_compile_result,
+            export_dir / f"compile_{len(session.compile_runs):02d}.zip",
+        )
+        return str(archive_path), f"Exported compile bundle to `{archive_path}`."
+    except Exception as error:
+        raise gr.Error(str(error)) from error
+
+
 def _session_from_state(state: dict | None) -> InteractiveSession:
     if not state:
         raise ValueError("prepare the session and mask first")
@@ -492,16 +784,22 @@ def _save_editor_mask(editor_value, base_image_path: str) -> Path:
 def _render_concepts(session: InteractiveSession) -> str:
     sections = []
     for concept in session.concepts:
-        tile_ids = ", ".join(f"`{tile_id}`" for tile_id in concept.palette_tile_ids)
-        risks = "; ".join(concept.critique.risks)
-        sections.append(
-            f"### {concept.name}\n\n"
-            f"**Thesis:** {concept.intent}\n\n"
-            f"**Composition:** {concept.composition}\n\n"
-            f"**Palette:** {tile_ids}\n\n"
-            f"**Risk:** {risks}"
+        tile_ids = " ".join(
+            f"<code style='margin-right:6px'>{html.escape(tile_id)}</code>"
+            for tile_id in concept.palette_tile_ids
         )
-    return "\n\n---\n\n".join(sections)
+        risks = "; ".join(html.escape(risk) for risk in concept.critique.risks)
+        sections.append(
+            "<section style='padding:10px 0;border-bottom:1px solid #ccc'>"
+            f"<h3>{html.escape(concept.name)}</h3>"
+            f"<p><strong>Thesis:</strong> {html.escape(concept.intent)}</p>"
+            f"<p><strong>Palette:</strong> {tile_ids}</p>"
+            "<details><summary>Details</summary>"
+            f"<p><strong>Composition:</strong> {html.escape(concept.composition)}</p>"
+            f"<p><strong>Risks:</strong> {risks}</p>"
+            "</details></section>"
+        )
+    return "".join(sections)
 
 
 def _demo_defaults() -> dict[str, object]:
