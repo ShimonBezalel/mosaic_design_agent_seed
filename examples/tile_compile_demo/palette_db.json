@@ -1,0 +1,37 @@
+{
+  "version": "1.0",
+  "source": "Deterministic tile compiler demo",
+  "notes": "Five real target colors; max_colors=4 should remove the tiny yellow demand.",
+  "tiles": [
+    {
+      "tile_id": "terracotta",
+      "name": "Terracotta",
+      "hex": "#C95A2A",
+      "inventory_level": "high"
+    },
+    {
+      "tile_id": "deep_blue",
+      "name": "Deep Blue",
+      "hex": "#1E4E8C",
+      "inventory_level": "high"
+    },
+    {
+      "tile_id": "turquoise",
+      "name": "Turquoise",
+      "hex": "#2FA7B1",
+      "inventory_level": "high"
+    },
+    {
+      "tile_id": "olive",
+      "name": "Olive Green",
+      "hex": "#5F7F2E",
+      "inventory_level": "medium"
+    },
+    {
+      "tile_id": "sun_yellow",
+      "name": "Sun Yellow",
+      "hex": "#F1C13A",
+      "inventory_level": "low"
+    }
+  ]
+}

@@ -20,6 +20,9 @@ from mosaic_agent.tile_map_export import (
 from mosaic_agent.tile_map_models import PaletteCompileRequest, PaletteCompileResult
 
 
+ROOT = Path(__file__).resolve().parents[1]
+
+
 REQUIRED_FILES = {
     "source_image.png",
     "mask.png",
@@ -194,3 +197,31 @@ def test_numbered_map_differs_from_flat_map_due_to_boundaries_and_labels(compile
     labels = np.asarray(Image.open(compiled_result.region_labels_path).convert("RGB"))
 
     assert np.any(palette_map != labels)
+
+
+def test_checked_in_compile_demo_has_broad_regions_mask_and_tiny_cleanup(tmp_path):
+    demo = ROOT / "examples" / "tile_compile_demo"
+    for name in ["source_image.png", "mask.png", "palette_db.json", "expected_notes.md"]:
+        assert (demo / name).exists()
+    request = PaletteCompileRequest(
+        source_image_path=str(demo / "source_image.png"),
+        mask_image_path=str(demo / "mask.png"),
+        palette_db_path=str(demo / "palette_db.json"),
+        selected_palette_ids=[],
+        max_colors=4,
+        granularity="coarse",
+        target_region_count=80,
+        min_region_area_px=120,
+        boundary_smoothing="light",
+        merge_tiny_regions=True,
+        output_dir=str(tmp_path / "demo-compile"),
+    )
+
+    result = compile_palette_map(request)
+
+    assert result.masked_pixel_count == 280 * 200
+    assert 3 <= result.color_count <= 4
+    assert "sun_yellow" not in {usage.tile_id for usage in result.color_usage}
+    assert REQUIRED_FILES == {
+        path.name for path in Path(result.qa_report_path).parent.iterdir() if path.is_file()
+    }
