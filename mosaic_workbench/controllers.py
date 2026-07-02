@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import shutil
 from pathlib import Path
+from typing import Literal
 from uuid import uuid4
 
 from mosaic_agent.edit_prompt_compiler import compile_edit_prompt
@@ -9,8 +10,10 @@ from mosaic_agent.image_edit_service import ImageEditRequest, StubImageEditProvi
 from mosaic_agent.load import load_palette
 from mosaic_agent.loop import run_agent_loop
 from mosaic_agent.models import PaletteDB, ProjectBrief, ReferenceImageRole
+from mosaic_agent.palette_compiler import compile_palette_map
 from mosaic_agent.providers.openai_edit import OpenAIImageEditProvider
 from mosaic_agent.session_models import EditTarget, GenerationRun, InteractiveSession, ReferenceAsset
+from mosaic_agent.tile_map_models import BoundarySmoothing, Granularity, PaletteCompileRequest
 from mosaic_workbench.mask_utils import create_mask_overlay, normalize_base_image, normalize_mask
 from mosaic_workbench.session_state import select_concept
 
@@ -145,6 +148,93 @@ def generate_variants(
         metadata={"quality": quality, "size": size},
     )
     return session.model_copy(update={"generation_runs": [*session.generation_runs, generation]})
+
+
+CompileSourceChoice = Literal["upload", "latest_variant", "base_canvas"]
+
+
+def resolve_compile_source(
+    session: InteractiveSession,
+    source_choice: CompileSourceChoice,
+    uploaded_source_path: str | None,
+) -> Path:
+    if source_choice == "upload":
+        if not uploaded_source_path:
+            raise ValueError("Upload a finalized source image before compiling.")
+        source = Path(uploaded_source_path)
+    elif source_choice == "latest_variant":
+        image_paths = [
+            image_path
+            for generation in session.generation_runs
+            for image_path in generation.image_paths
+        ]
+        if not image_paths:
+            raise ValueError("No generated variant is available to compile.")
+        source = Path(image_paths[-1])
+    elif source_choice == "base_canvas":
+        if session.edit_target is None:
+            raise ValueError("No base canvas is available to compile.")
+        source = Path(session.edit_target.base_image_path)
+    else:
+        raise ValueError(f"Unsupported compile source: {source_choice}")
+    if not source.is_file():
+        raise ValueError(f"Compile source image does not exist: {source}")
+    return source
+
+
+def compile_session_tile_map(
+    session: InteractiveSession,
+    *,
+    source_choice: CompileSourceChoice,
+    uploaded_source_path: str | None,
+    compile_mask_path: str | None,
+    whole_image: bool,
+    max_colors: int | None,
+    granularity: Granularity,
+    min_region_area_px: int,
+    boundary_smoothing: BoundarySmoothing,
+    merge_tiny_regions: bool,
+    physical_width_cm: float | None,
+    physical_height_cm: float | None,
+    out_root: str | Path = "runs/workbench",
+) -> InteractiveSession:
+    if not session.selected_palette_ids:
+        raise ValueError("Select at least one palette color before compiling.")
+    source = resolve_compile_source(session, source_choice, uploaded_source_path)
+    if whole_image:
+        mask_path = None
+    elif compile_mask_path:
+        mask_path = compile_mask_path
+    elif session.edit_target is not None:
+        mask_path = session.edit_target.mask_image_path
+    else:
+        mask_path = None
+
+    run_number = len(session.compile_runs) + 1
+    output_dir = Path(out_root) / session.session_id / "compilations" / f"run_{run_number:02d}"
+    request = PaletteCompileRequest(
+        source_image_path=str(source),
+        mask_image_path=mask_path,
+        palette_db_path=session.palette_db_path,
+        selected_palette_ids=session.selected_palette_ids,
+        max_colors=max_colors,
+        granularity=granularity,
+        min_region_area_px=min_region_area_px,
+        boundary_smoothing=boundary_smoothing,
+        merge_tiny_regions=merge_tiny_regions,
+        strict_palette=True,
+        physical_width_cm=physical_width_cm,
+        physical_height_cm=physical_height_cm,
+        output_dir=str(output_dir),
+    )
+    result = compile_palette_map(request)
+    return session.model_copy(
+        update={
+            "accepted_source_image_path": str(source),
+            "compile_runs": [*session.compile_runs, result],
+            "latest_compile_result": result,
+        }
+    )
 
 
 def _working_palette(session: InteractiveSession) -> PaletteDB:

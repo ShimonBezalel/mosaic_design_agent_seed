@@ -6,6 +6,7 @@ from typing import Literal
 from pydantic import Field
 
 from mosaic_agent.models import Concept, ProjectBrief, ReferenceImageRole, StrictModel
+from mosaic_agent.tile_map_models import PaletteCompileResult
 
 
 class ReferenceAsset(StrictModel):
@@ -43,5 +44,8 @@ class InteractiveSession(StrictModel):
     concepts: list[Concept] = Field(default_factory=list)
     selected_concept_id: str | None = None
     generation_runs: list[GenerationRun] = Field(default_factory=list)
+    accepted_source_image_path: str | None = None
+    compile_runs: list[PaletteCompileResult] = Field(default_factory=list)
+    latest_compile_result: PaletteCompileResult | None = None
     critique: list[str] = Field(default_factory=list)
     notes: str = ""

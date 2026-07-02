@@ -12,12 +12,15 @@ def export_session(session: InteractiveSession, out_dir: str | Path) -> Path:
     output = Path(out_dir)
     output.mkdir(parents=True, exist_ok=True)
     selected = _selected_concept(session)
+    if selected is None and not session.compile_runs:
+        raise ValueError("session has no selected concept or compile result to export")
 
     _write_json(output / "session.json", session.model_dump(mode="json"))
     _write_json(output / "normalized_brief.json", session.brief.model_dump(mode="json"))
-    _write_json(output / "selected_concept.json", selected.model_dump(mode="json"))
-    (output / "prompts.md").write_text(_render_prompts(session), encoding="utf-8")
-    (output / "critique.md").write_text(_render_critique(selected), encoding="utf-8")
+    if selected is not None:
+        _write_json(output / "selected_concept.json", selected.model_dump(mode="json"))
+        (output / "prompts.md").write_text(_render_prompts(session), encoding="utf-8")
+        (output / "critique.md").write_text(_render_critique(selected), encoding="utf-8")
 
     generated_variants: list[str] = []
     generation_runs: list[dict[str, object]] = []
@@ -65,6 +68,26 @@ def export_session(session: InteractiveSession, out_dir: str | Path) -> Path:
             }
         )
 
+    compile_runs: list[dict[str, object]] = []
+    for index, compile_result in enumerate(session.compile_runs, start=1):
+        relative_dir = Path("compile_runs") / f"run_{index:02d}"
+        destination = output / relative_dir
+        destination.mkdir(parents=True, exist_ok=True)
+        source_dir = Path(compile_result.qa_report_path).parent
+        for source in source_dir.iterdir():
+            if source.is_file():
+                shutil.copy2(source, destination / source.name)
+        compile_runs.append(
+            {
+                "run_id": compile_result.run_id,
+                "path": str(relative_dir),
+                "region_count": compile_result.region_count,
+                "color_count": compile_result.color_count,
+                "masked_pixel_count": compile_result.masked_pixel_count,
+                "deterministic_signature": _compile_signature(compile_result.qa_report_path),
+            }
+        )
+
     _write_json(
         output / "manifest.json",
         {
@@ -78,16 +101,18 @@ def export_session(session: InteractiveSession, out_dir: str | Path) -> Path:
             "input_references": input_references,
             "generated_variants": generated_variants,
             "generation_runs": generation_runs,
+            "compile_runs": compile_runs,
+            "latest_compile_run": compile_runs[-1]["path"] if compile_runs else "",
         },
     )
     return output
 
 
-def _selected_concept(session: InteractiveSession) -> Concept:
+def _selected_concept(session: InteractiveSession) -> Concept | None:
     for concept in session.concepts:
         if concept.concept_id == session.selected_concept_id:
             return concept
-    raise ValueError("a valid selected concept is required before export")
+    return None
 
 
 def _render_prompts(session: InteractiveSession) -> str:
@@ -110,3 +135,8 @@ def _render_critique(concept: Concept) -> str:
 
 def _write_json(path: Path, payload: dict[str, object]) -> None:
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+
+def _compile_signature(qa_report_path: str) -> str:
+    payload = json.loads(Path(qa_report_path).read_text(encoding="utf-8"))
+    return str(payload["deterministic_signature"])
