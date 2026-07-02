@@ -119,9 +119,8 @@ def load_work_area(
     with Image.open(path) as source:
         source.load()
         has_alpha = "A" in source.getbands()
-        meaningful_alpha = has_alpha and source.getchannel("A").getextrema() != (255, 255)
         resized = source.resize(size, Image.Resampling.NEAREST)
-        if meaningful_alpha:
+        if has_alpha:
             values = np.asarray(resized.getchannel("A"), dtype=np.uint8)
             return values < 128
         values = np.asarray(resized.convert("L"), dtype=np.uint8)

@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import numpy as np
 import pytest
 from PIL import Image
 
+from mosaic_agent.palette_compiler import compile_palette_map
 from mosaic_agent.models import PaletteDB, Tile
 from mosaic_agent.region_map import (
     build_region_records,
@@ -20,6 +22,7 @@ from mosaic_agent.region_map import (
     parse_hex_rgb,
     rgb_to_lab,
 )
+from mosaic_agent.tile_map_models import PaletteCompileRequest
 
 
 def make_palette() -> PaletteDB:
@@ -39,6 +42,39 @@ def save_rgba_mask(path: Path, alpha: list[list[int]], rgb: int = 255) -> Path:
     pixels[..., 3] = alpha_array
     Image.fromarray(pixels, "RGBA").save(path)
     return path
+
+
+def write_palette_db(path: Path) -> Path:
+    path.write_text(make_palette().model_dump_json(indent=2), encoding="utf-8")
+    return path
+
+
+def make_compile_request(
+    tmp_path: Path,
+    source: np.ndarray,
+    *,
+    selected: list[str] | None = None,
+    mask_path: Path | None = None,
+    output_name: str = "compiled",
+    **overrides,
+) -> PaletteCompileRequest:
+    source_path = tmp_path / f"source-{output_name}.png"
+    Image.fromarray(source.astype(np.uint8), "RGB").save(source_path)
+    palette_path = write_palette_db(tmp_path / f"palette-{output_name}.json")
+    data: dict[str, object] = {
+        "source_image_path": str(source_path),
+        "mask_image_path": str(mask_path) if mask_path else None,
+        "palette_db_path": str(palette_path),
+        "selected_palette_ids": selected or [],
+        "granularity": "coarse",
+        "target_region_count": 40,
+        "min_region_area_px": 4,
+        "boundary_smoothing": "none",
+        "merge_tiny_regions": True,
+        "output_dir": str(tmp_path / output_name),
+    }
+    data.update(overrides)
+    return PaletteCompileRequest(**data)
 
 
 def test_parse_hex_rgb_accepts_hash_and_bare_values():
@@ -102,14 +138,14 @@ def test_black_white_mask_uses_white_as_work_area(tmp_path):
     assert work.tolist() == [[True, False], [False, True]]
 
 
-def test_opaque_rgba_without_alpha_variation_uses_grayscale(tmp_path):
+def test_rgba_mask_always_uses_alpha_even_without_variation(tmp_path):
     mask = tmp_path / "opaque-rgba.png"
     pixels = np.array([[[255, 255, 255, 255], [0, 0, 0, 255]]], dtype=np.uint8)
     Image.fromarray(pixels, "RGBA").save(mask)
 
     work = load_work_area(mask, (2, 1))
 
-    assert work.tolist() == [[True, False]]
+    assert work.tolist() == [[False, False]]
 
 
 def test_mask_resize_preserves_hard_boundaries_with_nearest_neighbor(tmp_path):
@@ -352,3 +388,155 @@ def test_region_records_include_neighbors_and_geometry():
     assert records[0].bbox_xyxy == (0, 0, 2, 2)
     assert records[0].centroid_xy == pytest.approx((0.5, 0.5))
     assert records[0].estimated_area_cm2 == pytest.approx(10.0)
+
+
+def test_compile_output_uses_only_selected_palette_ids(tmp_path):
+    source = np.zeros((40, 80, 3), dtype=np.uint8)
+    source[:, :40] = (255, 0, 0)
+    source[:, 40:] = (0, 255, 0)
+    request = make_compile_request(tmp_path, source, selected=["red", "blue"])
+
+    result = compile_palette_map(request)
+
+    assert {usage.tile_id for usage in result.color_usage} <= {"red", "blue"}
+    assert {region.tile_id for region in result.regions} <= {"red", "blue"}
+
+
+def test_max_colors_keeps_highest_demand_tiles_and_reassigns(tmp_path):
+    source = np.zeros((50, 100, 3), dtype=np.uint8)
+    source[:, :50] = (255, 0, 0)
+    source[:, 50:80] = (0, 0, 255)
+    source[:, 80:] = (0, 255, 0)
+    request = make_compile_request(tmp_path, source, max_colors=2)
+
+    result = compile_palette_map(request)
+
+    assert {usage.tile_id for usage in result.color_usage} == {"red", "blue"}
+    assert result.color_count == 2
+    assert any("max_colors" in warning and "green" in warning for warning in result.warnings)
+
+
+def test_palette_map_pixels_inside_mask_are_exact_selected_hex_colors(tmp_path):
+    source = np.zeros((30, 60, 3), dtype=np.uint8)
+    source[:, :30] = (250, 20, 20)
+    source[:, 30:] = (10, 30, 240)
+    request = make_compile_request(tmp_path, source, selected=["red", "blue"])
+
+    result = compile_palette_map(request)
+    rendered = np.asarray(Image.open(result.palette_map_path).convert("RGB"))
+
+    assert set(map(tuple, rendered.reshape(-1, 3))) <= {(255, 0, 0), (0, 0, 255)}
+
+
+def test_same_input_and_parameters_have_same_signature_in_different_directories(tmp_path):
+    source = np.zeros((32, 48, 3), dtype=np.uint8)
+    source[:, :24] = (255, 0, 0)
+    source[:, 24:] = (0, 0, 255)
+    first = compile_palette_map(make_compile_request(tmp_path, source, output_name="first"))
+    second = compile_palette_map(make_compile_request(tmp_path, source, output_name="second"))
+
+    first_qa = json.loads(Path(first.qa_report_path).read_text(encoding="utf-8"))
+    second_qa = json.loads(Path(second.qa_report_path).read_text(encoding="utf-8"))
+
+    assert first_qa["deterministic_signature"] == second_qa["deterministic_signature"]
+    assert first.run_id == second.run_id
+
+
+def test_signature_changes_when_compilation_parameters_change(tmp_path):
+    rng = np.random.default_rng(9)
+    source = rng.integers(0, 256, size=(50, 70, 3), dtype=np.uint8)
+    coarse = compile_palette_map(
+        make_compile_request(tmp_path, source, output_name="coarse", granularity="coarse")
+    )
+    fine = compile_palette_map(
+        make_compile_request(tmp_path, source, output_name="fine", granularity="fine")
+    )
+
+    coarse_qa = json.loads(Path(coarse.qa_report_path).read_text(encoding="utf-8"))
+    fine_qa = json.loads(Path(fine.qa_report_path).read_text(encoding="utf-8"))
+    assert coarse_qa["deterministic_signature"] != fine_qa["deterministic_signature"]
+
+
+def test_no_mask_compiles_every_source_pixel(tmp_path):
+    source = np.full((17, 23, 3), (255, 0, 0), dtype=np.uint8)
+
+    result = compile_palette_map(make_compile_request(tmp_path, source, selected=["red"]))
+
+    assert result.masked_pixel_count == 17 * 23
+
+
+def test_masked_compile_excludes_outside_pixels_from_accounting(tmp_path):
+    source = np.full((20, 30, 3), (255, 0, 0), dtype=np.uint8)
+    alpha = np.full((20, 30), 255, dtype=np.uint8)
+    alpha[:, :12] = 0
+    mask_path = save_rgba_mask(tmp_path / "mask.png", alpha.tolist())
+
+    result = compile_palette_map(
+        make_compile_request(tmp_path, source, selected=["red"], mask_path=mask_path)
+    )
+
+    assert result.masked_pixel_count == 20 * 12
+    assert sum(item.pixel_count for item in result.color_usage) == 20 * 12
+
+
+def test_empty_work_mask_fails_cleanly(tmp_path):
+    source = np.full((10, 10, 3), (255, 0, 0), dtype=np.uint8)
+    mask_path = save_rgba_mask(tmp_path / "empty-mask.png", [[255] * 10 for _ in range(10)])
+    request = make_compile_request(tmp_path, source, mask_path=mask_path)
+
+    with pytest.raises(ValueError, match="Mask has no editable pixels"):
+        compile_palette_map(request)
+
+
+def test_legend_and_regions_account_for_every_masked_pixel(tmp_path):
+    source = np.zeros((24, 36, 3), dtype=np.uint8)
+    source[:, :18] = (255, 0, 0)
+    source[:, 18:] = (0, 0, 255)
+
+    result = compile_palette_map(make_compile_request(tmp_path, source))
+
+    assert sum(item.pixel_count for item in result.color_usage) == result.masked_pixel_count
+    assert sum(item.pixel_count for item in result.regions) == result.masked_pixel_count
+    assert sum(item.percent_of_mask for item in result.color_usage) == pytest.approx(100.0)
+
+
+def test_physical_dimensions_populate_region_and_color_areas(tmp_path):
+    source = np.full((20, 40, 3), (255, 0, 0), dtype=np.uint8)
+    request = make_compile_request(
+        tmp_path,
+        source,
+        selected=["red"],
+        physical_width_cm=200.0,
+        physical_height_cm=100.0,
+    )
+
+    result = compile_palette_map(request)
+
+    assert sum(item.estimated_area_cm2 or 0 for item in result.color_usage) == pytest.approx(20_000)
+    assert sum(item.estimated_area_cm2 or 0 for item in result.regions) == pytest.approx(20_000)
+
+
+def test_missing_physical_dimensions_leave_area_estimates_null(tmp_path):
+    source = np.full((20, 40, 3), (255, 0, 0), dtype=np.uint8)
+
+    result = compile_palette_map(make_compile_request(tmp_path, source, selected=["red"]))
+
+    assert all(item.estimated_area_cm2 is None for item in result.color_usage)
+    assert all(item.estimated_area_cm2 is None for item in result.regions)
+
+
+def test_seeded_random_compile_is_repeatable_and_palette_grounded(tmp_path):
+    rng = np.random.default_rng(2026)
+    source = rng.integers(0, 256, size=(37, 53, 3), dtype=np.uint8)
+    first = compile_palette_map(
+        make_compile_request(tmp_path, source, selected=["red", "green"], output_name="random-a")
+    )
+    second = compile_palette_map(
+        make_compile_request(tmp_path, source, selected=["red", "green"], output_name="random-b")
+    )
+    first_qa = json.loads(Path(first.qa_report_path).read_text(encoding="utf-8"))
+    second_qa = json.loads(Path(second.qa_report_path).read_text(encoding="utf-8"))
+
+    assert first_qa["deterministic_signature"] == second_qa["deterministic_signature"]
+    assert first_qa["colors_used_not_in_selected_palette"] == []
+    assert {usage.tile_id for usage in first.color_usage} <= {"red", "green"}
