@@ -6,3 +6,4 @@ runs/
 .env
 *.pyc
 *.egg-info/
+.worktrees/
