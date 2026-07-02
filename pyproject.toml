@@ -13,6 +13,8 @@ dependencies = [
   "jsonschema>=4",
   "openai>=1",
   "pillow>=10",
+  "numpy>=1.24",
+  "scikit-image>=0.21",
 ]
 
 [tool.setuptools.packages.find]
