@@ -21,6 +21,7 @@ from mosaic_agent.region_map import (
     nearest_palette_indices,
     parse_hex_rgb,
     rgb_to_lab,
+    segment_work_area,
 )
 from mosaic_agent.tile_map_models import PaletteCompileRequest
 
@@ -268,6 +269,25 @@ def test_fine_granularity_produces_at_least_as_many_segments_as_coarse():
     assert len(np.unique(coarse.segment_labels[work])) <= len(
         np.unique(fine.segment_labels[work])
     )
+
+
+def test_slic_failure_uses_deterministic_grid_fallback(monkeypatch):
+    import mosaic_agent.region_map as region_map
+
+    def fail_slic(*args, **kwargs):
+        raise RuntimeError("forced SLIC failure")
+
+    monkeypatch.setattr(region_map, "slic", fail_slic)
+    source_lab = rgb_to_lab(np.full((20, 30, 3), (255, 0, 0), dtype=np.uint8))
+    work = np.ones((20, 30), dtype=bool)
+
+    first, first_fallback = segment_work_area(source_lab, work, 24)
+    second, second_fallback = segment_work_area(source_lab, work, 24)
+
+    assert first_fallback is True
+    assert second_fallback is True
+    assert np.array_equal(first, second)
+    assert (first[work] > 0).all()
 
 
 def test_adjacent_same_tile_pixels_merge_into_one_component():
@@ -523,6 +543,37 @@ def test_missing_physical_dimensions_leave_area_estimates_null(tmp_path):
 
     assert all(item.estimated_area_cm2 is None for item in result.color_usage)
     assert all(item.estimated_area_cm2 is None for item in result.regions)
+
+
+def test_disabling_tiny_merge_preserves_more_regions(tmp_path):
+    source = np.full((20, 20, 3), (255, 0, 0), dtype=np.uint8)
+    source[8:11, 8:11] = (0, 0, 255)
+    without_merge = compile_palette_map(
+        make_compile_request(
+            tmp_path,
+            source,
+            selected=["red", "blue"],
+            output_name="without-merge",
+            target_region_count=400,
+            min_region_area_px=20,
+            merge_tiny_regions=False,
+        )
+    )
+    with_merge = compile_palette_map(
+        make_compile_request(
+            tmp_path,
+            source,
+            selected=["red", "blue"],
+            output_name="with-merge",
+            target_region_count=400,
+            min_region_area_px=20,
+            merge_tiny_regions=True,
+        )
+    )
+
+    assert without_merge.region_count == 2
+    assert with_merge.region_count == 1
+    assert without_merge.masked_pixel_count == with_merge.masked_pixel_count == 400
 
 
 def test_seeded_random_compile_is_repeatable_and_palette_grounded(tmp_path):
