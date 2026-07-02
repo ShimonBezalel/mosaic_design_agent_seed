@@ -126,8 +126,8 @@ def test_compile_ui_can_start_from_uploaded_image_without_prepared_session(tmp_p
         4,
         "none",
         True,
-        None,
-        None,
+        0,
+        0,
     )
 
     state, palette_map, region_labels, boundaries, legend, warnings, report, status = result

@@ -664,6 +664,12 @@ def _compile_tile_map_ui(
                 selected_palette_ids=selected_ids,
             )
         normalized_max_colors = int(max_colors) if max_colors not in (None, 0) else None
+        normalized_width = (
+            float(physical_width_cm) if physical_width_cm not in (None, 0) else None
+        )
+        normalized_height = (
+            float(physical_height_cm) if physical_height_cm not in (None, 0) else None
+        )
         session = compile_session_tile_map(
             session,
             source_choice=source_choice,
@@ -675,8 +681,8 @@ def _compile_tile_map_ui(
             min_region_area_px=int(min_region_area_px),
             boundary_smoothing=boundary_smoothing,
             merge_tiny_regions=merge_tiny_regions,
-            physical_width_cm=physical_width_cm,
-            physical_height_cm=physical_height_cm,
+            physical_width_cm=normalized_width,
+            physical_height_cm=normalized_height,
             out_root=ROOT / "runs" / "workbench",
         )
         result = session.latest_compile_result
