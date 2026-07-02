@@ -8,9 +8,14 @@ from PIL import Image
 
 from mosaic_agent.models import PaletteDB, Tile
 from mosaic_agent.region_map import (
+    build_region_records,
     build_palette_arrays,
+    create_initial_tile_map,
+    derive_segment_target,
+    label_tile_components,
     load_source_rgb,
     load_work_area,
+    merge_tiny_tile_regions,
     nearest_palette_indices,
     parse_hex_rgb,
     rgb_to_lab,
@@ -146,3 +151,204 @@ def test_large_source_is_resized_once_with_reported_scale(tmp_path):
     assert normalized.working_size == (100, 50)
     assert normalized.rgb.shape == (50, 100, 3)
     assert normalized.scale == pytest.approx(0.5)
+
+
+def test_granularity_derives_ordered_segment_targets():
+    coarse = derive_segment_target("coarse", area_px=1_000_000)
+    medium = derive_segment_target("medium", area_px=1_000_000)
+    fine = derive_segment_target("fine", area_px=1_000_000)
+
+    assert (coarse, medium, fine) == (120, 300, 650)
+
+
+def test_target_region_count_overrides_granularity_with_safe_bounds():
+    assert derive_segment_target("fine", area_px=10_000, target_region_count=75) == 75
+    assert derive_segment_target("coarse", area_px=12, target_region_count=75) == 12
+
+
+def test_simple_two_color_image_compiles_to_two_palette_colors():
+    source = np.zeros((40, 80, 3), dtype=np.uint8)
+    source[:, :40] = (255, 0, 0)
+    source[:, 40:] = (0, 0, 255)
+    work = np.ones((40, 80), dtype=bool)
+    palette = build_palette_arrays(make_palette(), ["red", "blue"])
+
+    initial = create_initial_tile_map(
+        source,
+        work,
+        palette,
+        granularity="coarse",
+        target_region_count=40,
+        boundary_smoothing="none",
+    )
+
+    used = {palette.tiles[index].tile_id for index in np.unique(initial.tile_indices[work])}
+    assert used == {"red", "blue"}
+
+
+def test_masked_two_color_image_only_assigns_inside_work_area():
+    source = np.zeros((30, 60, 3), dtype=np.uint8)
+    source[:, :30] = (255, 0, 0)
+    source[:, 30:] = (0, 0, 255)
+    work = np.zeros((30, 60), dtype=bool)
+    work[:, :30] = True
+    palette = build_palette_arrays(make_palette(), ["red", "blue"])
+
+    initial = create_initial_tile_map(
+        source,
+        work,
+        palette,
+        granularity="coarse",
+        boundary_smoothing="none",
+    )
+
+    assert set(np.unique(initial.tile_indices[work])) == {1}
+    assert (initial.tile_indices[~work] == -1).all()
+
+
+def test_segmentation_is_deterministic_for_identical_input():
+    rng = np.random.default_rng(20260702)
+    source = rng.integers(0, 256, size=(48, 64, 3), dtype=np.uint8)
+    work = np.ones((48, 64), dtype=bool)
+    palette = build_palette_arrays(make_palette(), [])
+
+    first = create_initial_tile_map(source, work, palette, granularity="medium")
+    second = create_initial_tile_map(source, work, palette, granularity="medium")
+
+    assert np.array_equal(first.segment_labels, second.segment_labels)
+    assert np.array_equal(first.tile_indices, second.tile_indices)
+    assert first.segment_delta_e == second.segment_delta_e
+
+
+def test_fine_granularity_produces_at_least_as_many_segments_as_coarse():
+    rng = np.random.default_rng(41)
+    source = rng.integers(0, 256, size=(120, 160, 3), dtype=np.uint8)
+    work = np.ones((120, 160), dtype=bool)
+    palette = build_palette_arrays(make_palette(), [])
+
+    coarse = create_initial_tile_map(source, work, palette, granularity="coarse")
+    fine = create_initial_tile_map(source, work, palette, granularity="fine")
+
+    assert len(np.unique(coarse.segment_labels[work])) <= len(
+        np.unique(fine.segment_labels[work])
+    )
+
+
+def test_adjacent_same_tile_pixels_merge_into_one_component():
+    tile_indices = np.zeros((3, 4), dtype=np.int32)
+    work = np.ones((3, 4), dtype=bool)
+
+    regions = label_tile_components(tile_indices, work)
+
+    assert set(regions.ravel()) == {1}
+
+
+def test_diagonal_same_tile_pixels_remain_separate_components():
+    tile_indices = np.array([[0, 1], [1, 0]], dtype=np.int32)
+    work = np.ones((2, 2), dtype=bool)
+
+    regions = label_tile_components(tile_indices, work)
+
+    assert len(np.unique(regions)) == 4
+
+
+def test_region_ids_are_stable_top_to_bottom_then_left_to_right():
+    tile_indices = np.array(
+        [
+            [0, 0, 1, 1],
+            [0, 0, 1, 1],
+            [1, 1, 0, 0],
+            [1, 1, 0, 0],
+        ],
+        dtype=np.int32,
+    )
+    work = np.ones((4, 4), dtype=bool)
+
+    regions = label_tile_components(tile_indices, work)
+
+    assert regions[0, 0] == 1
+    assert regions[0, 2] == 2
+    assert regions[2, 0] == 3
+    assert regions[2, 2] == 4
+
+
+def test_tiny_color_island_below_minimum_area_is_merged():
+    tile_indices = np.ones((7, 7), dtype=np.int32)
+    tile_indices[3, 3] = 0
+    work = np.ones((7, 7), dtype=bool)
+    source = np.full((7, 7, 3), (255, 0, 0), dtype=np.uint8)
+    palette = build_palette_arrays(make_palette(), ["red", "blue"])
+
+    cleaned = merge_tiny_tile_regions(
+        tile_indices,
+        work,
+        rgb_to_lab(source),
+        palette.lab,
+        min_region_area_px=4,
+    )
+
+    assert set(np.unique(cleaned.tile_indices[work])) == {1}
+    assert cleaned.region_count == 1
+
+
+def test_tiny_merge_does_not_change_masked_pixel_count():
+    tile_indices = np.ones((6, 6), dtype=np.int32)
+    tile_indices[2, 2] = 0
+    work = np.ones((6, 6), dtype=bool)
+    source = np.full((6, 6, 3), (255, 0, 0), dtype=np.uint8)
+    palette = build_palette_arrays(make_palette(), ["red", "blue"])
+
+    cleaned = merge_tiny_tile_regions(
+        tile_indices,
+        work,
+        rgb_to_lab(source),
+        palette.lab,
+        min_region_area_px=5,
+    )
+
+    assert int((cleaned.tile_indices >= 0).sum()) == int(work.sum())
+    assert (cleaned.tile_indices[~work] == -1).all()
+
+
+def test_tiny_only_region_without_neighbor_is_kept_with_warning():
+    tile_indices = np.array([[0]], dtype=np.int32)
+    work = np.array([[True]])
+    source_lab = rgb_to_lab(np.array([[[255, 0, 0]]], dtype=np.uint8))
+    palette = build_palette_arrays(make_palette(), ["red"])
+
+    cleaned = merge_tiny_tile_regions(
+        tile_indices,
+        work,
+        source_lab,
+        palette.lab,
+        min_region_area_px=4,
+    )
+
+    assert cleaned.region_count == 1
+    assert any("no adjacent region" in warning for warning in cleaned.warnings)
+
+
+def test_region_records_include_neighbors_and_geometry():
+    tile_indices = np.array([[0, 0, 1, 1], [0, 0, 1, 1]], dtype=np.int32)
+    work = np.ones((2, 4), dtype=bool)
+    source = np.zeros((2, 4, 3), dtype=np.uint8)
+    source[:, :2] = (0, 0, 255)
+    source[:, 2:] = (255, 0, 0)
+    palette = build_palette_arrays(make_palette(), ["red", "blue"])
+    regions = label_tile_components(tile_indices, work)
+
+    records = build_region_records(
+        regions,
+        tile_indices,
+        source,
+        rgb_to_lab(source),
+        palette,
+        pixel_area_cm2=2.5,
+    )
+
+    assert [record.region_id for record in records] == [1, 2]
+    assert records[0].neighbor_region_ids == [2]
+    assert records[1].neighbor_region_ids == [1]
+    assert records[0].bbox_xyxy == (0, 0, 2, 2)
+    assert records[0].centroid_xy == pytest.approx((0.5, 0.5))
+    assert records[0].estimated_area_cm2 == pytest.approx(10.0)
