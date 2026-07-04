@@ -93,8 +93,12 @@ def render_tessera_map(
     boundaries = find_boundaries(subdivision.tessera_ids, mode="inner") & compiled.work_mask
     grout_px = length_mm_to_px(scale, options.grout_width_mm, axis="mean")
     if grout_px > 0:
-        iterations = max(1, int(np.ceil(grout_px / 2.0)))
-        boundaries = binary_dilation(boundaries, iterations=iterations) & compiled.work_mask
+        extra_radius = max(0, int(round((grout_px - 1.0) / 2.0)))
+        if extra_radius > 0:
+            boundaries = binary_dilation(
+                boundaries,
+                iterations=extra_radius,
+            ) & compiled.work_mask
         rendered[boundaries] = (34, 30, 26)
     return Image.fromarray(rendered, "RGB")
 

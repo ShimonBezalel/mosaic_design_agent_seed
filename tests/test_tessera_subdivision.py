@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from dataclasses import replace
+
 import numpy as np
 import pytest
 
@@ -206,6 +208,35 @@ def test_tiny_disconnected_fragment_merges_to_adjacent_piece():
     assert any("tiny" in warning.lower() and "merged" in warning.lower() for warning in warnings)
 
 
+def test_tiny_boundary_fragment_never_merges_across_parent_region():
+    parent = np.ones((5, 7), dtype=np.int32)
+    parent[:, 3:] = 2
+    parent[2, 3] = 1
+    raw = np.ones((5, 7), dtype=np.int32)
+    raw[parent == 2] = 3
+    raw[2, 3] = 2
+    context = make_context(
+        height=5,
+        width=7,
+        region_ids=parent,
+        tile_indices=np.where(parent == 1, 0, 1),
+    )
+
+    cleaned, _ = cleanup_tessera_fragments(
+        raw,
+        parent,
+        context.physical_scale,
+        min_fragment_area_mm2=2.0,
+    )
+
+    assert cleaned[2, 3] == cleaned[2, 2]
+    assert all(
+        len(np.unique(parent[cleaned == piece_id])) == 1
+        for piece_id in np.unique(cleaned)
+        if piece_id > 0
+    )
+
+
 def test_requested_tessera_count_above_cap_fails_cleanly():
     context = make_context(height=100, width=100)
 
@@ -217,6 +248,28 @@ def test_requested_tessera_count_above_cap_fails_cleanly():
                 target_short_edge_mm=2,
                 preferred_aspect_ratio=1,
                 max_tessera_count=10,
+            ),
+        )
+
+
+def test_physical_piece_request_is_not_hidden_by_raster_clamping():
+    context = make_context(height=32, width=32)
+    mural_scale = build_physical_scale(
+        (32, 32),
+        context.work_mask,
+        2000,
+        2000,
+        "full_image",
+    )
+
+    with pytest.raises(ValueError, match="max_tessera_count"):
+        generate_tessera_seeds(
+            replace(context, physical_scale=mural_scale),
+            options(
+                min_short_edge_mm=8,
+                target_short_edge_mm=18,
+                max_long_edge_mm=55,
+                max_tessera_count=3000,
             ),
         )
 

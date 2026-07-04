@@ -104,6 +104,14 @@ def generate_tessera_seeds(
             f"requested {requested_total} tesserae exceeds max_tessera_count="
             f"{options.max_tessera_count}; increase physical target size or the explicit cap"
         )
+    for region_id, count in desired.items():
+        available_pixels = int(np.count_nonzero(context.region_ids == region_id))
+        if count > available_pixels:
+            raise ValueError(
+                f"parent region {region_id} needs {count} tesserae but has only "
+                f"{available_pixels} working pixels; use a higher-resolution source or increase "
+                "the physical target size"
+            )
 
     field = compute_gradient_orientation_field(context.source_rgb)
     seeds: list[TesseraSeed] = []
@@ -284,7 +292,7 @@ def _desired_seed_counts(
     for region_id in sorted(int(value) for value in np.unique(context.region_ids[context.work_mask])):
         pixel_count = int(np.count_nonzero(context.region_ids == region_id))
         count = max(1, int(round(pixel_count * pixel_area / target_area)))
-        desired[region_id] = min(pixel_count, count)
+        desired[region_id] = count
     return desired
 
 
@@ -523,7 +531,12 @@ def _neighbor_shared_edges(
     shared: dict[int, int] = {}
     for y_shift, x_shift in ((0, 1), (0, -1), (1, 0), (-1, 0)):
         shifted = np.roll(pieces, shift=(y_shift, x_shift), axis=(0, 1))
-        valid = pixels & same_parent
+        shifted_same_parent = np.roll(
+            same_parent,
+            shift=(y_shift, x_shift),
+            axis=(0, 1),
+        )
+        valid = pixels & same_parent & shifted_same_parent
         if y_shift == 1:
             valid[0, :] = False
         elif y_shift == -1:

@@ -4,6 +4,7 @@ import csv
 import json
 import zipfile
 from pathlib import Path
+from types import SimpleNamespace
 from xml.etree import ElementTree
 
 import numpy as np
@@ -11,6 +12,8 @@ import pytest
 from PIL import Image
 
 from mosaic_agent.palette_compiler import compile_palette_map
+from mosaic_agent.physical_scale import build_physical_scale
+from mosaic_agent.tessera_export import render_tessera_map
 from mosaic_agent.tile_map_export import export_compile_archive
 from mosaic_agent.tile_map_models import PaletteCompileRequest, PaletteCompileResult, TesseraCompileOptions
 
@@ -116,6 +119,45 @@ def test_tessera_pngs_match_palette_map_dimensions(tessera_result):
         assert tessera_map.size == expected
     with Image.open(tessera_result.tessera_result.tessera_boundaries_path) as boundaries:
         assert boundaries.size == expected
+
+
+def test_tessera_map_keeps_palette_fills_readable(tessera_result):
+    assert tessera_result.tessera_result is not None
+    rgb = np.asarray(Image.open(tessera_result.tessera_result.tessera_map_path).convert("RGB"))
+    palette_fill = np.all(rgb == (255, 0, 0), axis=2) | np.all(rgb == (0, 0, 255), axis=2)
+
+    assert float(palette_fill.mean()) > 0.6
+
+
+def test_subpixel_grout_width_does_not_expand_base_boundary(monkeypatch):
+    work = np.ones((4, 4), dtype=bool)
+    compiled = SimpleNamespace(
+        source_rgb=np.full((4, 4, 3), 128, dtype=np.uint8),
+        work_mask=work,
+        tile_indices=np.zeros((4, 4), dtype=np.int32),
+        palette=SimpleNamespace(rgb=np.asarray([[255, 0, 0]], dtype=np.uint8)),
+    )
+    subdivision = SimpleNamespace(
+        tessera_ids=np.asarray(
+            [[1, 1, 2, 2], [1, 1, 2, 2], [3, 3, 4, 4], [3, 3, 4, 4]],
+            dtype=np.int32,
+        )
+    )
+    scale = build_physical_scale((4, 4), work, 12, 12, "full_image")
+
+    def reject_dilation(*args, **kwargs):
+        raise AssertionError("subpixel grout must not dilate a one-pixel boundary")
+
+    monkeypatch.setattr("mosaic_agent.tessera_export.binary_dilation", reject_dilation)
+
+    rendered = render_tessera_map(
+        compiled,
+        subdivision,
+        scale,
+        TesseraCompileOptions(grout_width_mm=2),
+    )
+
+    assert rendered.size == (4, 4)
 
 
 def test_tessera_svg_contains_piece_and_parent_identity(tessera_result):

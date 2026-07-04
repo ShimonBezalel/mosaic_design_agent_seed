@@ -382,7 +382,7 @@ def build_app(*, demo: bool = False) -> gr.Blocks:
             inputs=[palette_path, selected_palette_ids],
             outputs=[compile_palette_swatches],
         )
-        base_image.change(_seed_editor, inputs=[base_image], outputs=[drawn_mask])
+        base_image.input(_seed_editor, inputs=[base_image], outputs=[drawn_mask])
         prepare_session.click(
             _prepare_session_ui,
             inputs=[

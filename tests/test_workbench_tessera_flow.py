@@ -20,9 +20,9 @@ PALETTE_PATH = ROOT / "examples" / "palette_db.example.json"
 def make_session_and_source(tmp_path: Path) -> tuple[InteractiveSession, Path]:
     brief = load_brief(ROOT / "examples" / "project_brief.example.json")
     palette = load_palette(PALETTE_PATH)
-    source = np.zeros((32, 32, 3), dtype=np.uint8)
-    source[:, :16] = (205, 92, 44)
-    source[:, 16:] = (36, 84, 148)
+    source = np.zeros((84, 84, 3), dtype=np.uint8)
+    source[:, :42] = (205, 92, 44)
+    source[:, 42:] = (36, 84, 148)
     source_path = tmp_path / "accepted.png"
     Image.fromarray(source, "RGB").save(source_path)
     session = InteractiveSession(
@@ -70,7 +70,7 @@ def test_controller_compile_with_physical_tessera_subdivision(tmp_path):
         shape_style="irregular",
         random_seed=0,
         grout_width_mm=2,
-        max_tessera_count=3000,
+        max_tessera_count=10000,
         **controller_options(tmp_path),
     )
 
@@ -80,7 +80,7 @@ def test_controller_compile_with_physical_tessera_subdivision(tmp_path):
     assert Path(tessera.tessera_map_path).is_file()
     assert Path(tessera.tessera_boundaries_path).is_file()
     assert Path(tessera.tessera_qa_report_path).is_file()
-    assert tessera.tessera_count <= 3000
+    assert tessera.tessera_count <= 10000
 
 
 def test_controller_compile_without_tessera_preserves_disabled_path(tmp_path):
@@ -121,8 +121,8 @@ def test_full_session_export_includes_tessera_artifacts(tmp_path):
         session,
         source_choice="upload",
         uploaded_source_path=str(source),
-        physical_width_cm=200,
-        physical_height_cm=200,
+        physical_width_cm=20,
+        physical_height_cm=20,
         enable_tessera=True,
         max_tessera_count=3000,
         **controller_options(tmp_path),

@@ -74,6 +74,25 @@ def test_build_app_exposes_required_workbench_controls():
         assert label in config
 
 
+def test_base_canvas_seeds_draw_editor_only_on_user_input():
+    config = build_app().get_config_file()
+    labels = {
+        component["id"]: component.get("props", {}).get("label")
+        for component in config["components"]
+    }
+    editor_dependencies = [
+        dependency
+        for dependency in config["dependencies"]
+        if [labels.get(component_id) for component_id in dependency.get("inputs", [])]
+        == ["Base canvas image"]
+        and [labels.get(component_id) for component_id in dependency.get("outputs", [])]
+        == ["Draw mask"]
+    ]
+
+    assert len(editor_dependencies) == 1
+    assert editor_dependencies[0]["targets"][0][1] == "input"
+
+
 def test_demo_fixture_has_matching_base_and_alpha_mask():
     demo_dir = ROOT / "examples" / "workbench_demo"
     for name in [
