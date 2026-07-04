@@ -1,12 +1,12 @@
 # Mosaic Studio Workbench
 
-The workbench now supports optional AI ideation, but the core path is finalized image -> deterministic studio-palette tile map -> exportable paint-by-color bundle.
+The core path is finalized image -> deterministic studio-palette color regions -> optional physically scaled tessera subdivision -> exportable planning bundle.
 
 The product has three stages:
 
 1. **Optional ideation and masked editing** for producing a visually accepted source image.
 2. **Deterministic palette compilation** for converting that image into broad regions using only real studio tile IDs.
-3. **Optional mosaic preview**, deferred until it can consume the deterministic map without changing it.
+3. **Optional tessera subdivision** for smaller flow-oriented shard planning inside the immutable color regions.
 
 The compile stage works offline, needs no API key, and never asks a generative model to choose final colors.
 
@@ -30,11 +30,12 @@ Open **5. Compile to Tile Map** and:
 1. Load a palette DB and select the tile colors actually available in the studio.
 2. Choose an uploaded finalized image, the latest generated variant, or the base canvas.
 3. Use the session mask, upload a compile-specific mask, or enable whole-image mode.
-4. Set granularity, maximum colors, minimum region area, and boundary smoothing.
-5. Optionally enter accurate physical width and height for area estimates.
-6. Click **Compile to Tile Map**.
-7. Review the flat palette map, numbered regions, boundary overlay, legend, and QA warnings.
-8. Export the compile bundle or the complete session.
+4. Set color granularity, shape regularity, maximum colors, optional minimum color area, and boundary smoothing.
+5. Enter accurate physical dimensions and select whether they describe the full image or masked field.
+6. Optionally enable tessera subdivision and set physical edge, aspect, flow, style, seed, grout-preview, and count-cap controls.
+7. Click **Compile to Tile Map**.
+8. Review color regions first, then tessera previews and both QA summaries.
+9. Export the compile bundle or the complete session.
 
 Ideation is not required. A finalized image can be uploaded and compiled directly without generating concepts.
 
@@ -56,11 +57,15 @@ Inside the work area, `palette_map.png` contains only exact palette hex colors. 
 
 - **Granularity:** coarse, medium, or fine SLIC segment target.
 - **Max colors:** optional deterministic reduction within selected tiles.
-- **Minimum region area:** merge smaller connected regions into an adjacent region.
+- **Minimum color area:** optional physical cleanup threshold in square centimeters.
+- **Color shape regularity:** organic, balanced, or regular SLIC compactness.
 - **Boundary smoothing:** none, light, or medium source smoothing before segmentation.
 - **Merge tiny regions:** enable deterministic region cleanup.
 - **Strict palette:** locked on in this version.
-- **Physical dimensions:** optional width and height for square-centimeter estimates.
+- **Physical dimensions:** width, height, and full-image or mask-bbox basis.
+- **Tessera dimensions:** minimum/target short edge and maximum long edge in millimeters.
+- **Tessera form:** preferred/maximum aspect, flow strength, edge following, and shape style.
+- **Tessera reproducibility:** explicit seed, grout preview width, and maximum count.
 
 Images with a side longer than 1400 pixels compile at a proportional working resolution. Reports record original and working dimensions; outputs are not enlarged back to imply precision that was not calculated.
 
@@ -79,6 +84,14 @@ Every compile bundle contains:
 - `qa_report.json`
 - `compile_report.html`
 - `compile_request.json`
+
+When tessera subdivision is enabled, the same bundle also contains:
+
+- `tessera_map.png`
+- `tessera_boundaries.png`
+- `tessera.svg`
+- `tessera.csv`
+- `tessera_qa_report.json`
 
 Full session export also includes available brief, concept, reference, edit, and generated-variant artifacts plus every compile run.
 
@@ -99,6 +112,8 @@ Launch the workbench, choose **Upload finalized source image**, then use:
 - smoothing: `light`
 
 The expected behavior is documented in `examples/tile_compile_demo/expected_notes.md`.
+
+For a physical tessera example on a 200 x 200 cm field, start with 8 / 18 / 55 mm edges, aspect 1.8 / 4.0, medium flow, irregular style, and a 7,500 count cap. This requests about 6,860 pieces and requires at least that many work pixels. Keep the default 3,000 cap by raising the target short edge to about 28 mm.
 
 ## Optional Ideation
 
@@ -137,7 +152,7 @@ Compiler, export, and workbench tests use synthetic images and make no network c
 
 ## Algorithm
 
-See [docs/deterministic_tile_map_compiler.md](docs/deterministic_tile_map_compiler.md) for segmentation, color matching, cleanup, accounting, signatures, and known limitations.
+See [docs/deterministic_tile_map_compiler.md](docs/deterministic_tile_map_compiler.md) for color compilation and [docs/physical_tessera_subdivision.md](docs/physical_tessera_subdivision.md) for physical scale, flow, subdivision, safeguards, and Yael's review workflow.
 
 ## Known Limitations
 
@@ -145,10 +160,11 @@ See [docs/deterministic_tile_map_compiler.md](docs/deterministic_tile_map_compil
 - Region boundaries require artist review.
 - Tile availability quantities are only as good as palette DB metadata.
 - Perceptual nearest color may not match physical ceramic appearance under real light.
-- Broken-tile shape layout is not solved yet.
+- Tessera geometry is a planning subdivision, not a fracture, cutting, or installation plan.
 - Text and lettering should be designed manually.
 - Physical area estimates require accurate dimensions.
 - SVG contours are planning geometry, not CAD-grade fabrication paths.
+- Small physical targets require sufficient source resolution and can produce large exports.
 
 ## Repository Layout
 
