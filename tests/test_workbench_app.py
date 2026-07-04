@@ -19,7 +19,7 @@ def test_build_app_exposes_required_workbench_controls():
     app = build_app()
 
     assert isinstance(app, gr.Blocks)
-    config = json.dumps(app.get_config_file(), default=str)
+    config = json.dumps(app.get_config_file(), default=str, ensure_ascii=False)
     for label in [
         "Palette DB path",
         "Base canvas image",
@@ -35,21 +35,41 @@ def test_build_app_exposes_required_workbench_controls():
         "Compile source",
         "Compile-specific mask",
         "Whole image",
+        "Color-area compilation",
         "Max colors",
-        "Minimum region area (px)",
+        "Minimum color area (cm²)",
+        "Color shape regularity",
         "Boundary smoothing",
         "Merge tiny regions",
         "Strict palette",
         "Physical width (cm)",
         "Physical height (cm)",
+        "Physical dimensions apply to",
+        "Tessera / shard subdivision",
+        "Enable tessera subdivision",
+        "Minimum short edge (mm)",
+        "Target short edge (mm)",
+        "Maximum long edge (mm)",
+        "Preferred aspect ratio",
+        "Maximum aspect ratio",
+        "Flow strength",
+        "Edge following",
+        "Shape style",
+        "Random seed",
+        "Grout preview width (mm)",
+        "Maximum tessera count",
         "Compile to Tile Map",
         "Palette map",
         "Numbered region map",
         "Region boundaries",
+        "Tessera map",
+        "Tessera boundaries",
+        "Tessera QA",
         "Tile legend",
         "Compile report",
         "Compile bundle",
         "Generated maps are planning aids",
+        "Color regions define palette areas",
     ]:
         assert label in config
 
@@ -130,12 +150,27 @@ def test_compile_ui_can_start_from_uploaded_image_without_prepared_session(tmp_p
         0,
     )
 
-    state, palette_map, region_labels, boundaries, legend, warnings, report, status = result
+    (
+        state,
+        palette_map,
+        region_labels,
+        boundaries,
+        tessera_map,
+        tessera_boundaries,
+        legend,
+        warnings,
+        tessera_qa,
+        report,
+        status,
+    ) = result
     assert state["concepts"] == []
     assert Path(palette_map).exists()
     assert Path(region_labels).exists()
     assert Path(boundaries).exists()
+    assert tessera_map is None
+    assert tessera_boundaries is None
     assert legend
     assert "planning aids" in warnings
+    assert tessera_qa == ""
     assert Path(report).exists()
     assert "Compiled" in status

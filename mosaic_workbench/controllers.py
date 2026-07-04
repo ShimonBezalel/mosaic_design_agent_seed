@@ -13,7 +13,16 @@ from mosaic_agent.models import PaletteDB, ProjectBrief, ReferenceImageRole
 from mosaic_agent.palette_compiler import compile_palette_map
 from mosaic_agent.providers.openai_edit import OpenAIImageEditProvider
 from mosaic_agent.session_models import EditTarget, GenerationRun, InteractiveSession, ReferenceAsset
-from mosaic_agent.tile_map_models import BoundarySmoothing, Granularity, PaletteCompileRequest
+from mosaic_agent.tile_map_models import (
+    BoundarySmoothing,
+    EdgeFollowing,
+    FlowStrength,
+    Granularity,
+    PaletteCompileRequest,
+    PhysicalScaleBasis,
+    ShapeStyle,
+    TesseraCompileOptions,
+)
 from mosaic_workbench.mask_utils import create_mask_overlay, normalize_base_image, normalize_mask
 from mosaic_workbench.session_state import select_concept
 
@@ -197,6 +206,21 @@ def compile_session_tile_map(
     physical_width_cm: float | None,
     physical_height_cm: float | None,
     out_root: str | Path = "runs/workbench",
+    color_compactness: float = 5.0,
+    minimum_color_area_cm2: float | None = None,
+    physical_scale_basis: PhysicalScaleBasis = "mask_bbox",
+    enable_tessera: bool = False,
+    min_short_edge_mm: float = 8.0,
+    target_short_edge_mm: float = 18.0,
+    max_long_edge_mm: float = 55.0,
+    preferred_aspect_ratio: float = 1.8,
+    max_aspect_ratio: float = 4.0,
+    flow_strength: FlowStrength = "medium",
+    edge_following: EdgeFollowing = "medium",
+    shape_style: ShapeStyle = "irregular",
+    random_seed: int = 0,
+    grout_width_mm: float = 2.0,
+    max_tessera_count: int = 3000,
 ) -> InteractiveSession:
     if not session.selected_palette_ids:
         raise ValueError("Select at least one palette color before compiling.")
@@ -210,6 +234,27 @@ def compile_session_tile_map(
     else:
         mask_path = None
 
+    if enable_tessera and (physical_width_cm is None or physical_height_cm is None):
+        raise ValueError(
+            "Physical width and height are required when tessera subdivision is enabled."
+        )
+    tessera_options = None
+    if enable_tessera:
+        tessera_options = TesseraCompileOptions(
+            physical_scale_basis=physical_scale_basis,
+            min_short_edge_mm=min_short_edge_mm,
+            target_short_edge_mm=target_short_edge_mm,
+            max_long_edge_mm=max_long_edge_mm,
+            preferred_aspect_ratio=preferred_aspect_ratio,
+            max_aspect_ratio=max_aspect_ratio,
+            flow_strength=flow_strength,
+            edge_following=edge_following,
+            shape_style=shape_style,
+            random_seed=random_seed,
+            grout_width_mm=grout_width_mm,
+            max_tessera_count=max_tessera_count,
+        )
+
     run_number = len(session.compile_runs) + 1
     output_dir = Path(out_root) / session.session_id / "compilations" / f"run_{run_number:02d}"
     request = PaletteCompileRequest(
@@ -220,11 +265,15 @@ def compile_session_tile_map(
         max_colors=max_colors,
         granularity=granularity,
         min_region_area_px=min_region_area_px,
+        minimum_color_area_cm2=minimum_color_area_cm2,
+        color_compactness=color_compactness,
         boundary_smoothing=boundary_smoothing,
         merge_tiny_regions=merge_tiny_regions,
         strict_palette=True,
         physical_width_cm=physical_width_cm,
         physical_height_cm=physical_height_cm,
+        physical_scale_basis=physical_scale_basis,
+        tessera_options=tessera_options,
         output_dir=str(output_dir),
     )
     result = compile_palette_map(request)

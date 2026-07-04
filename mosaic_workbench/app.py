@@ -223,6 +223,10 @@ def build_app(*, demo: bool = False) -> gr.Blocks:
                     sources=["upload", "clipboard"],
                 )
             whole_image = gr.Checkbox(value=False, label="Whole image")
+            gr.Markdown(
+                "### Color-area compilation\n"
+                "Color regions define palette areas. Their boundaries stay authoritative during shard subdivision."
+            )
             with gr.Row():
                 compile_granularity = gr.Radio(
                     choices=["coarse", "medium", "fine"],
@@ -230,11 +234,19 @@ def build_app(*, demo: bool = False) -> gr.Blocks:
                     label="Compile granularity",
                 )
                 max_colors = gr.Number(value=None, precision=0, label="Max colors")
-                min_region_area = gr.Number(
-                    value=64,
-                    precision=0,
-                    minimum=1,
-                    label="Minimum region area (px)",
+                minimum_color_area = gr.Number(
+                    value=None,
+                    minimum=0,
+                    label="Minimum color area (cm²)",
+                )
+                color_compactness = gr.Radio(
+                    choices=[
+                        ("Organic", 2.0),
+                        ("Balanced", 5.0),
+                        ("Regular", 12.0),
+                    ],
+                    value=5.0,
+                    label="Color shape regularity",
                 )
                 boundary_smoothing = gr.Radio(
                     choices=["none", "light", "medium"],
@@ -250,6 +262,75 @@ def build_app(*, demo: bool = False) -> gr.Blocks:
                 )
                 physical_width = gr.Number(value=None, label="Physical width (cm)")
                 physical_height = gr.Number(value=None, label="Physical height (cm)")
+                physical_scale_basis = gr.Radio(
+                    choices=[
+                        ("Masked field bounding box", "mask_bbox"),
+                        ("Whole source image", "full_image"),
+                    ],
+                    value="mask_bbox",
+                    label="Physical dimensions apply to",
+                )
+            min_region_area = gr.State(value=64)
+            gr.Markdown(
+                "### Tessera / shard subdivision\n"
+                "Tesserae subdivide color regions without changing tile IDs. Outputs are planning geometry, not cut lines."
+            )
+            enable_tessera = gr.Checkbox(value=False, label="Enable tessera subdivision")
+            with gr.Row():
+                min_short_edge = gr.Number(
+                    value=8,
+                    minimum=0.1,
+                    label="Minimum short edge (mm)",
+                )
+                target_short_edge = gr.Number(
+                    value=18,
+                    minimum=0.1,
+                    label="Target short edge (mm)",
+                )
+                max_long_edge = gr.Number(
+                    value=55,
+                    minimum=0.1,
+                    label="Maximum long edge (mm)",
+                )
+                preferred_aspect = gr.Number(
+                    value=1.8,
+                    minimum=1,
+                    label="Preferred aspect ratio",
+                )
+                max_aspect = gr.Number(
+                    value=4,
+                    minimum=1,
+                    label="Maximum aspect ratio",
+                )
+            with gr.Row():
+                flow_strength = gr.Radio(
+                    choices=["none", "low", "medium", "high"],
+                    value="medium",
+                    label="Flow strength",
+                )
+                edge_following = gr.Radio(
+                    choices=["low", "medium", "high"],
+                    value="medium",
+                    label="Edge following",
+                )
+                shape_style = gr.Radio(
+                    choices=["irregular", "angular", "smooth", "slivered"],
+                    value="irregular",
+                    label="Shape style",
+                )
+            with gr.Row():
+                random_seed = gr.Number(value=0, precision=0, label="Random seed")
+                grout_width = gr.Number(
+                    value=2,
+                    minimum=0,
+                    label="Grout preview width (mm)",
+                )
+                max_tessera_count = gr.Number(
+                    value=3000,
+                    precision=0,
+                    minimum=1,
+                    label="Maximum tessera count",
+                )
             with gr.Row():
                 compile_button = gr.Button("Compile to Tile Map", variant="primary")
                 export_compile_button = gr.Button("Export Compile Bundle")
@@ -257,6 +338,12 @@ def build_app(*, demo: bool = False) -> gr.Blocks:
                 palette_map_preview = gr.Image(type="filepath", label="Palette map")
                 region_labels_preview = gr.Image(type="filepath", label="Numbered region map")
                 boundaries_preview = gr.Image(type="filepath", label="Region boundaries")
+            with gr.Row():
+                tessera_map_preview = gr.Image(type="filepath", label="Tessera map")
+                tessera_boundaries_preview = gr.Image(
+                    type="filepath",
+                    label="Tessera boundaries",
+                )
             tile_legend = gr.Dataframe(
                 headers=[
                     "Tile ID",
@@ -274,6 +361,7 @@ def build_app(*, demo: bool = False) -> gr.Blocks:
                 label="Tile legend",
             )
             qa_warnings = gr.Markdown()
+            tessera_qa = gr.Markdown(label="Tessera QA")
             with gr.Row():
                 compile_report = gr.File(label="Compile report")
                 compile_archive = gr.File(label="Compile bundle")
@@ -382,14 +470,32 @@ def build_app(*, demo: bool = False) -> gr.Blocks:
                 merge_tiny_regions,
                 physical_width,
                 physical_height,
+                color_compactness,
+                minimum_color_area,
+                physical_scale_basis,
+                enable_tessera,
+                min_short_edge,
+                target_short_edge,
+                max_long_edge,
+                preferred_aspect,
+                max_aspect,
+                flow_strength,
+                edge_following,
+                shape_style,
+                random_seed,
+                grout_width,
+                max_tessera_count,
             ],
             outputs=[
                 session_state,
                 palette_map_preview,
                 region_labels_preview,
                 boundaries_preview,
+                tessera_map_preview,
+                tessera_boundaries_preview,
                 tile_legend,
                 qa_warnings,
+                tessera_qa,
                 compile_report,
                 compile_status,
             ],
@@ -633,6 +739,21 @@ def _compile_tile_map_ui(
     merge_tiny_regions: bool,
     physical_width_cm: float | None,
     physical_height_cm: float | None,
+    color_compactness: float = 5.0,
+    minimum_color_area_cm2: float | None = None,
+    physical_scale_basis: str = "mask_bbox",
+    enable_tessera: bool = False,
+    min_short_edge_mm: float = 8.0,
+    target_short_edge_mm: float = 18.0,
+    max_long_edge_mm: float = 55.0,
+    preferred_aspect_ratio: float = 1.8,
+    max_aspect_ratio: float = 4.0,
+    flow_strength: str = "medium",
+    edge_following: str = "medium",
+    shape_style: str = "irregular",
+    random_seed: float | int = 0,
+    grout_width_mm: float = 2.0,
+    max_tessera_count: float | int = 3000,
 ):
     try:
         if not selected_ids:
@@ -670,6 +791,11 @@ def _compile_tile_map_ui(
         normalized_height = (
             float(physical_height_cm) if physical_height_cm not in (None, 0) else None
         )
+        normalized_minimum_color_area = (
+            float(minimum_color_area_cm2)
+            if minimum_color_area_cm2 not in (None, 0)
+            else None
+        )
         session = compile_session_tile_map(
             session,
             source_choice=source_choice,
@@ -683,6 +809,21 @@ def _compile_tile_map_ui(
             merge_tiny_regions=merge_tiny_regions,
             physical_width_cm=normalized_width,
             physical_height_cm=normalized_height,
+            color_compactness=float(color_compactness),
+            minimum_color_area_cm2=normalized_minimum_color_area,
+            physical_scale_basis=physical_scale_basis,
+            enable_tessera=enable_tessera,
+            min_short_edge_mm=float(min_short_edge_mm),
+            target_short_edge_mm=float(target_short_edge_mm),
+            max_long_edge_mm=float(max_long_edge_mm),
+            preferred_aspect_ratio=float(preferred_aspect_ratio),
+            max_aspect_ratio=float(max_aspect_ratio),
+            flow_strength=flow_strength,
+            edge_following=edge_following,
+            shape_style=shape_style,
+            random_seed=int(random_seed),
+            grout_width_mm=float(grout_width_mm),
+            max_tessera_count=int(max_tessera_count),
             out_root=ROOT / "runs" / "workbench",
         )
         result = session.latest_compile_result
@@ -709,17 +850,34 @@ def _compile_tile_map_ui(
         )
         if not result.warnings:
             warning_lines.append("- No QA warnings.")
+        tessera = result.tessera_result
+        tessera_qa_lines: list[str] = []
+        if tessera is not None:
+            tessera_qa_lines = [
+                "### Tessera QA",
+                "",
+                f"- Pieces: {tessera.tessera_count}",
+                f"- Mean area: {tessera.mean_area_mm2:.2f} mm²",
+                f"- Mean aspect ratio: {tessera.mean_aspect_ratio:.2f}",
+                f"- Signature: `{tessera.deterministic_signature[:12]}`",
+            ]
+            tessera_qa_lines.extend(f"- {warning}" for warning in tessera.warnings[:10])
         status = (
             f"Compiled {result.region_count} regions using {result.color_count} studio colors. "
             f"Signature `{result.run_id}`."
         )
+        if tessera is not None:
+            status += f" Subdivided into {tessera.tessera_count} tesserae."
         return (
             session.model_dump(mode="json"),
             result.palette_map_path,
             result.region_labels_path,
             result.region_boundaries_path,
+            tessera.tessera_map_path if tessera is not None else None,
+            tessera.tessera_boundaries_path if tessera is not None else None,
             legend,
             "\n".join(warning_lines),
+            "\n".join(tessera_qa_lines),
             result.compile_report_html_path,
             status,
         )
