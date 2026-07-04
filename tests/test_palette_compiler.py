@@ -257,6 +257,26 @@ def test_segmentation_is_deterministic_for_identical_input():
     assert first.segment_delta_e == second.segment_delta_e
 
 
+def test_slic_compactness_changes_geometry_and_remains_deterministic():
+    yy, xx = np.mgrid[:96, :128]
+    source = np.zeros((96, 128, 3), dtype=np.uint8)
+    source[..., 0] = np.where(xx < 44 + 14 * np.sin(yy / 10), 230, 35)
+    source[..., 1] = np.where(yy < 36 + xx / 5, 60, 205)
+    source[..., 2] = ((xx * 3 + yy * 2) % 256).astype(np.uint8)
+    source_lab = rgb_to_lab(source)
+    work = np.ones((96, 128), dtype=bool)
+
+    organic_a, fallback_a = segment_work_area(source_lab, work, 90, compactness=2.0)
+    organic_b, fallback_b = segment_work_area(source_lab, work, 90, compactness=2.0)
+    regular_a, fallback_c = segment_work_area(source_lab, work, 90, compactness=12.0)
+    regular_b, fallback_d = segment_work_area(source_lab, work, 90, compactness=12.0)
+
+    assert not any((fallback_a, fallback_b, fallback_c, fallback_d))
+    assert np.array_equal(organic_a, organic_b)
+    assert np.array_equal(regular_a, regular_b)
+    assert not np.array_equal(organic_a, regular_a)
+
+
 def test_fine_granularity_produces_at_least_as_many_segments_as_coarse():
     rng = np.random.default_rng(41)
     source = rng.integers(0, 256, size=(120, 160, 3), dtype=np.uint8)
@@ -534,6 +554,26 @@ def test_physical_dimensions_populate_region_and_color_areas(tmp_path):
 
     assert sum(item.estimated_area_cm2 or 0 for item in result.color_usage) == pytest.approx(20_000)
     assert sum(item.estimated_area_cm2 or 0 for item in result.regions) == pytest.approx(20_000)
+
+
+def test_minimum_color_area_cm2_overrides_legacy_pixel_threshold(tmp_path):
+    source = np.full((100, 100, 3), (255, 0, 0), dtype=np.uint8)
+    request = make_compile_request(
+        tmp_path,
+        source,
+        selected=["red"],
+        min_region_area_px=7,
+        minimum_color_area_cm2=100.0,
+        physical_width_cm=100.0,
+        physical_height_cm=100.0,
+        physical_scale_basis="full_image",
+    )
+
+    result = compile_palette_map(request)
+
+    assert result.parameters["minimum_color_area_cm2"] == 100.0
+    assert result.parameters["effective_min_region_area_px"] == 100
+    assert result.parameters["min_region_area_px"] == 7
 
 
 def test_missing_physical_dimensions_leave_area_estimates_null(tmp_path):

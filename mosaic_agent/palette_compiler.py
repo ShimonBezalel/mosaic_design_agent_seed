@@ -8,6 +8,7 @@ from pathlib import Path
 import numpy as np
 
 from mosaic_agent.load import load_palette
+from mosaic_agent.physical_scale import area_mm2_to_px, build_physical_scale
 from mosaic_agent.region_map import (
     PaletteArrays,
     build_palette_arrays,
@@ -24,6 +25,7 @@ from mosaic_agent.tile_map_models import (
     ColorUsage,
     PaletteCompileRequest,
     PaletteCompileResult,
+    PhysicalScale,
     RegionRecord,
 )
 
@@ -48,6 +50,9 @@ def compile_palette_map(request: PaletteCompileRequest) -> PaletteCompileResult:
     if masked_pixel_count == 0:
         raise ValueError("Mask has no editable pixels.")
 
+    physical_scale = _build_compile_scale(request, source.working_size, work_mask)
+    effective_min_region_area_px = _effective_min_region_area_px(request, physical_scale)
+
     source_lab = smooth_source_lab(source.rgb, request.boundary_smoothing)
     initial = create_initial_tile_map(
         source.rgb,
@@ -56,6 +61,7 @@ def compile_palette_map(request: PaletteCompileRequest) -> PaletteCompileResult:
         granularity=request.granularity,
         target_region_count=request.target_region_count,
         boundary_smoothing=request.boundary_smoothing,
+        compactness=request.color_compactness,
     )
     effective_palette, initial_tiles, dropped_ids = _apply_max_colors(
         palette_db,
@@ -88,7 +94,7 @@ def compile_palette_map(request: PaletteCompileRequest) -> PaletteCompileResult:
             work_mask,
             source_lab,
             effective_palette.lab,
-            request.min_region_area_px,
+            effective_min_region_area_px,
         )
         final_tiles = cleanup.tile_indices
         region_ids = cleanup.region_ids
@@ -98,7 +104,7 @@ def compile_palette_map(request: PaletteCompileRequest) -> PaletteCompileResult:
         final_tiles[~work_mask] = -1
         region_ids = label_tile_components(final_tiles, work_mask)
 
-    pixel_area_cm2 = _pixel_area_cm2(request, source.working_size)
+    pixel_area_cm2 = _pixel_area_cm2(physical_scale)
     regions = build_region_records(
         region_ids,
         final_tiles,
@@ -132,6 +138,7 @@ def compile_palette_map(request: PaletteCompileRequest) -> PaletteCompileResult:
         working_size=source.working_size,
         working_scale=source.scale,
         segment_target=initial.target_count,
+        effective_min_region_area_px=effective_min_region_area_px,
     )
     signature = _deterministic_signature(
         final_tiles,
@@ -141,7 +148,9 @@ def compile_palette_map(request: PaletteCompileRequest) -> PaletteCompileResult:
     )
     run_id = signature[:12]
     tiny_regions = [
-        region.region_id for region in regions if region.pixel_count < request.min_region_area_px
+        region.region_id
+        for region in regions
+        if region.pixel_count < effective_min_region_area_px
     ]
     used_ids = {usage.tile_id for usage in color_usage}
     qa_report: dict[str, object] = {
@@ -251,15 +260,38 @@ def _apply_max_colors(
     return effective, reassigned, dropped_ids
 
 
-def _pixel_area_cm2(
+def _build_compile_scale(
     request: PaletteCompileRequest,
     working_size: tuple[int, int],
-) -> float | None:
+    work_mask: np.ndarray,
+) -> PhysicalScale | None:
     if request.physical_width_cm is None or request.physical_height_cm is None:
         return None
-    return (request.physical_width_cm * request.physical_height_cm) / (
-        working_size[0] * working_size[1]
+    return build_physical_scale(
+        working_size,
+        work_mask,
+        request.physical_width_cm * 10.0,
+        request.physical_height_cm * 10.0,
+        request.physical_scale_basis,
     )
+
+
+def _pixel_area_cm2(scale: PhysicalScale | None) -> float | None:
+    if scale is None:
+        return None
+    return scale.mm_per_px_x * scale.mm_per_px_y / 100.0
+
+
+def _effective_min_region_area_px(
+    request: PaletteCompileRequest,
+    scale: PhysicalScale | None,
+) -> int:
+    if request.minimum_color_area_cm2 is None:
+        return request.min_region_area_px
+    if scale is None:
+        raise ValueError("minimum color area requires physical dimensions")
+    area_px = area_mm2_to_px(scale, request.minimum_color_area_cm2 * 100.0)
+    return max(1, int(np.ceil(area_px)))
 
 
 def _build_color_usage(
@@ -311,6 +343,7 @@ def _parameters(
     working_size: tuple[int, int],
     working_scale: float,
     segment_target: int,
+    effective_min_region_area_px: int,
 ) -> dict[str, object]:
     return {
         "selected_palette_ids": selected_ids,
@@ -320,11 +353,15 @@ def _parameters(
         "target_region_count": request.target_region_count,
         "segment_target": segment_target,
         "min_region_area_px": request.min_region_area_px,
+        "minimum_color_area_cm2": request.minimum_color_area_cm2,
+        "effective_min_region_area_px": effective_min_region_area_px,
+        "color_compactness": request.color_compactness,
         "boundary_smoothing": request.boundary_smoothing,
         "merge_tiny_regions": request.merge_tiny_regions,
         "strict_palette": request.strict_palette,
         "physical_width_cm": request.physical_width_cm,
         "physical_height_cm": request.physical_height_cm,
+        "physical_scale_basis": request.physical_scale_basis,
         "original_dimensions": list(original_size),
         "working_dimensions": list(working_size),
         "working_scale": working_scale,

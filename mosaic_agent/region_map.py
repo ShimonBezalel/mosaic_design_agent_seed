@@ -195,12 +195,15 @@ def segment_work_area(
     source_lab: np.ndarray,
     work_mask: np.ndarray,
     target_count: int,
+    compactness: float = 5.0,
 ) -> tuple[np.ndarray, bool]:
+    if compactness <= 0:
+        raise ValueError("SLIC compactness must be positive")
     try:
         labels = slic(
             source_lab,
             n_segments=target_count,
-            compactness=10,
+            compactness=compactness,
             start_label=1,
             mask=work_mask,
             convert2lab=False,
@@ -224,6 +227,7 @@ def create_initial_tile_map(
     granularity: Granularity,
     target_region_count: int | None = None,
     boundary_smoothing: BoundarySmoothing = "light",
+    compactness: float = 5.0,
 ) -> InitialTileMap:
     source = np.asarray(source_rgb)
     work = np.asarray(work_mask, dtype=bool)
@@ -232,7 +236,12 @@ def create_initial_tile_map(
     work_count = int(work.sum())
     target = derive_segment_target(granularity, work_count, target_region_count)
     source_lab = smooth_source_lab(source, boundary_smoothing)
-    segment_labels, fallback_used = segment_work_area(source_lab, work, target)
+    segment_labels, fallback_used = segment_work_area(
+        source_lab,
+        work,
+        target,
+        compactness=compactness,
+    )
     tile_indices = np.full(work.shape, -1, dtype=np.int32)
     segment_delta_e: dict[int, float] = {}
 

@@ -93,6 +93,11 @@ def test_compile_request_requires_both_physical_dimensions(valid_request_data):
         PaletteCompileRequest(**(valid_request_data | {"physical_width_cm": 120.0}))
 
 
+def test_compile_request_requires_dimensions_for_physical_minimum(valid_request_data):
+    with pytest.raises(ValidationError, match="minimum color area"):
+        PaletteCompileRequest(**(valid_request_data | {"minimum_color_area_cm2": 25.0}))
+
+
 @pytest.mark.parametrize("field", ["source_image_path", "palette_db_path", "mask_image_path"])
 def test_compile_request_rejects_missing_input_paths(valid_request_data, field, tmp_path):
     data = valid_request_data | {field: str(tmp_path / f"missing-{field}.png")}
