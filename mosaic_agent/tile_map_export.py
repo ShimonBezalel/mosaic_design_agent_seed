@@ -13,7 +13,11 @@ from PIL import Image, ImageDraw, ImageFont
 from skimage.measure import find_contours
 from skimage.segmentation import find_boundaries
 
-from mosaic_agent.tile_map_models import PaletteCompileRequest, PaletteCompileResult
+from mosaic_agent.tile_map_models import (
+    PaletteCompileRequest,
+    PaletteCompileResult,
+    TesseraCompileResult,
+)
 
 if TYPE_CHECKING:
     from mosaic_agent.palette_compiler import CompiledTileMap
@@ -62,6 +66,7 @@ class ArtifactPaths:
     qa_report: Path
     compile_report_html: Path
     compile_request: Path
+    tessera_result: TesseraCompileResult | None = None
 
 
 def write_compile_artifacts(
@@ -96,8 +101,39 @@ def write_compile_artifacts(
     write_regions_csv(compiled, paths.regions_csv)
     _write_json(paths.qa_report, qa_report)
     _write_json(paths.compile_request, request.model_dump(mode="json"))
-    write_compile_report(compiled, qa_report, paths.compile_report_html)
-    return paths
+    tessera_result = None
+    if compiled.tessera_subdivision is not None:
+        if compiled.physical_scale is None or request.tessera_options is None:
+            raise ValueError("tessera artifact export requires scale and options")
+        from mosaic_agent.tessera_export import write_tessera_artifacts
+
+        tessera_result = write_tessera_artifacts(
+            compiled,
+            compiled.tessera_subdivision,
+            compiled.physical_scale,
+            request.tessera_options,
+            output_dir,
+        )
+    write_compile_report(
+        compiled,
+        qa_report,
+        paths.compile_report_html,
+        tessera_result=tessera_result,
+    )
+    return ArtifactPaths(
+        source_image=paths.source_image,
+        mask_image=paths.mask_image,
+        palette_map=paths.palette_map,
+        region_labels=paths.region_labels,
+        region_boundaries=paths.region_boundaries,
+        regions_svg=paths.regions_svg,
+        legend_csv=paths.legend_csv,
+        regions_csv=paths.regions_csv,
+        qa_report=paths.qa_report,
+        compile_report_html=paths.compile_report_html,
+        compile_request=paths.compile_request,
+        tessera_result=tessera_result,
+    )
 
 
 def render_palette_map(compiled: "CompiledTileMap") -> Image.Image:
@@ -215,6 +251,8 @@ def write_compile_report(
     compiled: "CompiledTileMap",
     qa_report: dict[str, object],
     path: Path,
+    *,
+    tessera_result: TesseraCompileResult | None = None,
 ) -> None:
     warning_items = "".join(
         f"<li>{html.escape(str(warning))}</li>" for warning in qa_report["warnings"]
@@ -233,6 +271,22 @@ def write_compile_report(
         for item in compiled.color_usage
     )
     parameters = html.escape(json.dumps(qa_report["parameters"], indent=2, sort_keys=True))
+    tessera_section = ""
+    if tessera_result is not None:
+        tessera_section = f"""
+  <h2>Tessera subdivision</h2>
+  <div class="images">
+    <figure><img src="tessera_map.png" alt="Palette tessera map"><figcaption>Palette tessera map</figcaption></figure>
+    <figure><img src="tessera_boundaries.png" alt="Tessera boundary overlay"><figcaption>Tessera boundaries on source</figcaption></figure>
+  </div>
+  <h3>Tessera QA summary</h3>
+  <p>{tessera_result.tessera_count} tesserae; mean area {tessera_result.mean_area_mm2:.2f} mm2; mean aspect ratio {tessera_result.mean_aspect_ratio:.2f}.</p>
+  <ul>
+    <li><a href="tessera.svg">Tessera contours (SVG)</a></li>
+    <li><a href="tessera.csv">Tessera records (CSV)</a></li>
+    <li><a href="tessera_qa_report.json">Tessera QA report (JSON)</a></li>
+  </ul>
+"""
     document = f"""<!doctype html>
 <html lang="en">
 <head>
@@ -260,6 +314,7 @@ def write_compile_report(
     <figure><img src="region_labels.png" alt="Numbered region map"><figcaption>Numbered region map</figcaption></figure>
     <figure><img src="region_boundaries.png" alt="Region boundaries"><figcaption>Boundary overlay</figcaption></figure>
   </div>
+  {tessera_section}
   <h2>QA warnings</h2><ul>{warning_items}</ul>
   <h2>Tile legend</h2>
   <table><thead><tr><th>Color</th><th>Tile ID</th><th>Name</th><th>Pixels</th><th>Mask</th><th>Area cm2</th><th>Regions</th><th>Mean Delta E</th></tr></thead><tbody>{legend_rows}</tbody></table>

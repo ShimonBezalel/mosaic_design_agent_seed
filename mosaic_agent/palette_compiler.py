@@ -28,6 +28,7 @@ from mosaic_agent.tile_map_models import (
     PhysicalScale,
     RegionRecord,
 )
+from mosaic_agent.tessera import TesseraContext, TesseraSubdivision, subdivide_tesserae
 
 
 @dataclass(frozen=True)
@@ -39,6 +40,8 @@ class CompiledTileMap:
     palette: PaletteArrays
     regions: tuple[RegionRecord, ...]
     color_usage: tuple[ColorUsage, ...]
+    physical_scale: PhysicalScale | None = None
+    tessera_subdivision: TesseraSubdivision | None = None
 
 
 def compile_palette_map(request: PaletteCompileRequest) -> PaletteCompileResult:
@@ -140,6 +143,29 @@ def compile_palette_map(request: PaletteCompileRequest) -> PaletteCompileResult:
         segment_target=initial.target_count,
         effective_min_region_area_px=effective_min_region_area_px,
     )
+    tessera_scale: PhysicalScale | None = None
+    tessera_subdivision: TesseraSubdivision | None = None
+    if request.tessera_options is not None:
+        if request.physical_width_cm is None or request.physical_height_cm is None:
+            raise ValueError("tessera subdivision requires positive physical dimensions")
+        tessera_scale = build_physical_scale(
+            source.working_size,
+            work_mask,
+            request.physical_width_cm * 10.0,
+            request.physical_height_cm * 10.0,
+            request.tessera_options.physical_scale_basis,
+        )
+        tessera_subdivision = subdivide_tesserae(
+            TesseraContext(
+                source_rgb=source.rgb,
+                work_mask=work_mask,
+                tile_indices=final_tiles,
+                region_ids=region_ids,
+                physical_scale=tessera_scale,
+                palette_tile_ids=tuple(tile.tile_id for tile in effective_palette.tiles),
+            ),
+            request.tessera_options,
+        )
     signature = _deterministic_signature(
         final_tiles,
         region_ids,
@@ -189,6 +215,8 @@ def compile_palette_map(request: PaletteCompileRequest) -> PaletteCompileResult:
         palette=effective_palette,
         regions=tuple(regions),
         color_usage=tuple(color_usage),
+        physical_scale=tessera_scale or physical_scale,
+        tessera_subdivision=tessera_subdivision,
     )
     from mosaic_agent.tile_map_export import write_compile_artifacts
 
@@ -218,6 +246,7 @@ def compile_palette_map(request: PaletteCompileRequest) -> PaletteCompileResult:
         regions=regions,
         warnings=warnings,
         parameters=parameters,
+        tessera_result=artifacts.tessera_result,
     )
 
 
@@ -362,6 +391,11 @@ def _parameters(
         "physical_width_cm": request.physical_width_cm,
         "physical_height_cm": request.physical_height_cm,
         "physical_scale_basis": request.physical_scale_basis,
+        "tessera_options": (
+            request.tessera_options.model_dump(mode="json")
+            if request.tessera_options is not None
+            else None
+        ),
         "original_dimensions": list(original_size),
         "working_dimensions": list(working_size),
         "working_scale": working_scale,
